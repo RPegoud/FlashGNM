@@ -1,0 +1,150 @@
+{
+ "source": "Griffa, Aleman-Gomez & Hagmann, Zenodo 2872624 (CC BY 4.0); Lausanne (Cammoun 2012) MNI152NLin2009aSym centroids from netneurotools",
+ "scales": {
+  "033": {
+   "n": 68,
+   "subjects": 70,
+   "checks": {
+    "source_symmetry_error": 0.0,
+    "source_diag_max_dropped": 0.07852780121545172,
+    "strict_upper": true,
+    "positive_weights": true,
+    "no_duplicates": true,
+    "dist_matches_saved_matrix": true,
+    "dist_symmetric_zero_diag": true,
+    "hemisphere_order_R_then_L": true
+   },
+   "edges_mean_sd_min_max": [
+    610.8571428571429,
+    41.62769878485296,
+    481,
+    699
+   ],
+   "density_mean": 0.2681550232033112,
+   "order_check": {
+    "spearman_dist_vs_consensus": -0.4286,
+    "null_within_hemi_perm_mean_sd": [
+     -0.1422,
+     0.023
+    ],
+    "nodes_with_a_5_nearest_neighbour_at_consensus_0.5": 1.0
+   }
+  },
+  "060": {
+   "n": 114,
+   "subjects": 70,
+   "checks": {
+    "source_symmetry_error": 0.0,
+    "source_diag_max_dropped": 0.07918269698416161,
+    "strict_upper": true,
+    "positive_weights": true,
+    "no_duplicates": true,
+    "dist_matches_saved_matrix": true,
+    "dist_symmetric_zero_diag": true,
+    "hemisphere_order_R_then_L": true
+   },
+   "edges_mean_sd_min_max": [
+    1227.7857142857142,
+    79.83498926037431,
+    994,
+    1426
+   ],
+   "density_mean": 0.1906203562002351,
+   "order_check": {
+    "spearman_dist_vs_consensus": -0.4498,
+    "null_within_hemi_perm_mean_sd": [
+     -0.1642,
+     0.018
+    ],
+    "nodes_with_a_5_nearest_neighbour_at_consensus_0.5": 1.0
+   }
+  },
+  "125": {
+   "n": 219,
+   "subjects": 70,
+   "checks": {
+    "source_symmetry_error": 0.0,
+    "source_diag_max_dropped": 0.10160394240246574,
+    "strict_upper": true,
+    "positive_weights": true,
+    "no_duplicates": true,
+    "dist_matches_saved_matrix": true,
+    "dist_symmetric_zero_diag": true,
+    "hemisphere_order_R_then_L": true
+   },
+   "edges_mean_sd_min_max": [
+    2639.5142857142855,
+    166.16358057710505,
+    2220,
+    3068
+   ],
+   "density_mean": 0.11057409767979078,
+   "order_check": {
+    "spearman_dist_vs_consensus": -0.4329,
+    "null_within_hemi_perm_mean_sd": [
+     -0.1562,
+     0.0093
+    ],
+    "nodes_with_a_5_nearest_neighbour_at_consensus_0.5": 1.0
+   }
+  },
+  "250": {
+   "n": 448,
+   "subjects": 70,
+   "checks": {
+    "source_symmetry_error": 0.0,
+    "source_diag_max_dropped": 0.08646412234979836,
+    "strict_upper": true,
+    "positive_weights": true,
+    "no_duplicates": true,
+    "dist_matches_saved_matrix": true,
+    "dist_symmetric_zero_diag": true,
+    "hemisphere_order_R_then_L": true
+   },
+   "edges_mean_sd_min_max": [
+    5324.4,
+    334.04975677284966,
+    4653,
+    6328
+   ],
+   "density_mean": 0.05317593480345158,
+   "order_check": {
+    "spearman_dist_vs_consensus": -0.3772,
+    "null_within_hemi_perm_mean_sd": [
+     -0.1364,
+     0.0063
+    ],
+    "nodes_with_a_5_nearest_neighbour_at_consensus_0.5": 1.0
+   }
+  },
+  "500": {
+   "n": 1000,
+   "subjects": 70,
+   "checks": {
+    "source_symmetry_error": 0.0,
+    "source_diag_max_dropped": 0.1143576604825585,
+    "strict_upper": true,
+    "positive_weights": true,
+    "no_duplicates": true,
+    "dist_matches_saved_matrix": true,
+    "dist_symmetric_zero_diag": true,
+    "hemisphere_order_R_then_L": true
+   },
+   "edges_mean_sd_min_max": [
+    10785.92857142857,
+    720.639979887492,
+    9139,
+    12788
+   ],
+   "density_mean": 0.02159345059345059,
+   "order_check": {
+    "spearman_dist_vs_consensus": -0.3304,
+    "null_within_hemi_perm_mean_sd": [
+     -0.1136,
+     0.0044
+    ],
+    "nodes_with_a_5_nearest_neighbour_at_consensus_0.5": 0.963
+   }
+  }
+ }
+}

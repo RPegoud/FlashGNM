@@ -1,0 +1,28 @@
+[project]
+name = "FlashGNM"
+version = "0.1.0"
+description = "Fast generative network model fitting on GPU (SoTA Scientific Parallelism Hackathon, Nov 2026)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # GNM toolbox (Young, Mills, Poli; MIT): reference implementation and baseline.
+    # Pinned to the upstream commit the prototype was built against.
+    "GenerativeNetworkModels @ git+https://github.com/EdwardJamesYoung/GenerativeNetworkModels@c6eabe10142d908c750d1fb09802cf09c8c56a39",
+    "torch==2.8.0",          # CUDA 12.8 wheels; brings triton 3.4 on linux/x86_64
+    "numpy==1.26.4",         # the toolbox pins this
+    "scipy>=1.13.1",
+    "networkx>=3.0",
+    "matplotlib>=3.9.4",
+]
+
+[dependency-groups]
+dev = [
+    "modal>=1.2.6",
+    "pytest>=8.4.2",
+]
+
+[tool.uv]
+package = false
+# The toolbox pins wandb==0.15.12, whose dependency pathtools doesn't build on Python 3.12.
+# `import gnm` doesn't need it (only gnm.fitting.sweep imports wandb), so drop it.
+override-dependencies = ["wandb; sys_platform == 'never'"]

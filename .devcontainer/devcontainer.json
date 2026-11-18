@@ -1,0 +1,50 @@
+{
+  "name": "FlashGNM dev",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "options": [
+      "--platform=linux/amd64"
+    ]
+  },
+  "initializeCommand": "touch ${localWorkspaceFolder}/.env",
+  "runArgs": [
+    "--platform=linux/amd64",
+    "--env-file",
+    "${localWorkspaceFolder}/.env"
+  ],
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "mounts": [
+    "source=FlashGNM-uv-cache,target=/root/.cache/uv,type=volume",
+    "source=FlashGNM-triton-cache,target=/root/.cache/triton_cache,type=volume",
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
+    "source=claude-config,target=/home/vscode/.claude,type=volume"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "Anthropic.claude-code",
+        "albert.TabOut",
+        "charliermarsh.ruff",
+        "Gruntfuggly.todo-tree",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.jupyter-renderers",
+        "yzhang.markdown-all-in-one",
+        "redhat.vscode-yaml",
+        "njpwerner.autodocstring"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python"
+      }
+    }
+  },
+  "postCreateCommand": "uv sync --frozen && python -c 'import torch, triton; print(torch.__version__, triton.__version__)'",
+  "containerEnv": {
+    "UV_LINK_MODE": "copy",
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+  },
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+  }
+}

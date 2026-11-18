@@ -1,0 +1,178 @@
+{
+ "source": "MICA-MICs micapipe_MICs_v1.1.zip (OSF j532r, CC0)",
+ "subjects": 50,
+ "scales": {
+  "100": {
+   "checks": {
+    "medial_wall_zero": true,
+    "diag_dropped": true,
+    "length_missing_where_w": 0,
+    "length_where_no_w": 0
+   },
+   "density_mean_sd_min_max": [
+    0.9945,
+    0.0151,
+    0.8913,
+    0.9996
+   ],
+   "subjects_reaching_density": {
+    "10%": 50,
+    "20%": 50,
+    "30%": 50,
+    "50%": 50
+   },
+   "order_check": {
+    "7net": {
+     "hemisphere_labels_match_rows": true,
+     "spearman_dist_vs_mean_tract_length": 0.8381,
+     "null_within_hemi_perm_mean_sd": [
+      0.261,
+      0.0257
+     ],
+     "spearman_dist_vs_mean_log_weight": -0.6224,
+     "strongest_edge_in_5_nearest": 0.78
+    },
+    "17net": {
+     "hemisphere_labels_match_rows": true,
+     "spearman_dist_vs_mean_tract_length": 0.3582,
+     "null_within_hemi_perm_mean_sd": [
+      0.2594,
+      0.0202
+     ],
+     "spearman_dist_vs_mean_log_weight": -0.2698,
+     "strongest_edge_in_5_nearest": 0.18
+    }
+   },
+   "centroid_order_used": "7net"
+  },
+  "200": {
+   "checks": {
+    "medial_wall_zero": true,
+    "diag_dropped": true,
+    "length_missing_where_w": 0,
+    "length_where_no_w": 0
+   },
+   "density_mean_sd_min_max": [
+    0.9628,
+    0.0291,
+    0.7831,
+    0.9843
+   ],
+   "subjects_reaching_density": {
+    "10%": 50,
+    "20%": 50,
+    "30%": 50,
+    "50%": 50
+   },
+   "order_check": {
+    "7net": {
+     "hemisphere_labels_match_rows": true,
+     "spearman_dist_vs_mean_tract_length": 0.8272,
+     "null_within_hemi_perm_mean_sd": [
+      0.2504,
+      0.0145
+     ],
+     "spearman_dist_vs_mean_log_weight": -0.576,
+     "strongest_edge_in_5_nearest": 0.735
+    },
+    "17net": {
+     "hemisphere_labels_match_rows": true,
+     "spearman_dist_vs_mean_tract_length": 0.364,
+     "null_within_hemi_perm_mean_sd": [
+      0.2551,
+      0.0103
+     ],
+     "spearman_dist_vs_mean_log_weight": -0.2741,
+     "strongest_edge_in_5_nearest": 0.14
+    }
+   },
+   "centroid_order_used": "7net"
+  },
+  "400": {
+   "checks": {
+    "medial_wall_zero": true,
+    "diag_dropped": true,
+    "length_missing_where_w": 0,
+    "length_where_no_w": 0
+   },
+   "density_mean_sd_min_max": [
+    0.8575,
+    0.044,
+    0.6282,
+    0.9061
+   ],
+   "subjects_reaching_density": {
+    "10%": 50,
+    "20%": 50,
+    "30%": 50,
+    "50%": 50
+   },
+   "order_check": {
+    "7net": {
+     "hemisphere_labels_match_rows": true,
+     "spearman_dist_vs_mean_tract_length": 0.8101,
+     "null_within_hemi_perm_mean_sd": [
+      0.2445,
+      0.011
+     ],
+     "spearman_dist_vs_mean_log_weight": -0.5215,
+     "strongest_edge_in_5_nearest": 0.6325
+    },
+    "17net": {
+     "hemisphere_labels_match_rows": true,
+     "spearman_dist_vs_mean_tract_length": 0.3541,
+     "null_within_hemi_perm_mean_sd": [
+      0.2422,
+      0.007
+     ],
+     "spearman_dist_vs_mean_log_weight": -0.2531,
+     "strongest_edge_in_5_nearest": 0.155
+    }
+   },
+   "centroid_order_used": "7net"
+  },
+  "1000": {
+   "checks": {
+    "medial_wall_zero": true,
+    "diag_dropped": true,
+    "length_missing_where_w": 0,
+    "length_where_no_w": 0
+   },
+   "density_mean_sd_min_max": [
+    0.5856,
+    0.0448,
+    0.3835,
+    0.6455
+   ],
+   "subjects_reaching_density": {
+    "10%": 50,
+    "20%": 50,
+    "30%": 50,
+    "50%": 48
+   },
+   "order_check": {
+    "7net": {
+     "hemisphere_labels_match_rows": true,
+     "spearman_dist_vs_mean_tract_length": 0.7875,
+     "null_within_hemi_perm_mean_sd": [
+      0.2285,
+      0.0068
+     ],
+     "spearman_dist_vs_mean_log_weight": -0.4541,
+     "strongest_edge_in_5_nearest": 0.449
+    },
+    "17net": {
+     "hemisphere_labels_match_rows": true,
+     "spearman_dist_vs_mean_tract_length": 0.3579,
+     "null_within_hemi_perm_mean_sd": [
+      0.231,
+      0.0067
+     ],
+     "spearman_dist_vs_mean_log_weight": -0.2677,
+     "strongest_edge_in_5_nearest": 0.112
+    }
+   },
+   "centroid_order_used": "7net"
+  }
+ }
+}
