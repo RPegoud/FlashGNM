@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-21T14:41:54",
+  "host": "modal",
+  "python": "3.12.3",
+  "torch": "2.8.0+cu128",
+  "triton": "3.4.0",
+  "cuda": "12.8",
+  "device": "cuda",
+  "git_sha": "747857c96dc57e7005c25d35fa1248dd97855c70",
+  "git_dirty": null,
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "gpu_mem_gb": 85.031190528,
+  "sm_count": 132,
+  "argv": "bench/bench_sim.py --impls triton_proto --tag triton_proto",
+  "args": {
+    "impls": [
+      "triton_proto"
+    ],
+    "n": [
+      68,
+      219,
+      1000,
+      2000
+    ],
+    "B": [
+      1,
+      64,
+      1024
+    ],
+    "T": null,
+    "dist": "auto",
+    "repeats": 3,
+    "probe_steps": 20,
+    "slow_s": 60.0,
+    "seed": 0,
+    "device": "cuda",
+    "out": null,
+    "tag": "triton_proto"
+  }
+}
