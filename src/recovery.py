@@ -127,3 +127,35 @@ def run_subject(scale: str, subject: int, eta: float, gamma: float, eta_dist: fl
     freq, A_g = group_consensus(A_all, subject)
     out["group_consensus"] = metrics(A_g[None], A_t, D, prob=freq)
     return out
+
+
+@torch.no_grad()
+def run_rule_subject(scale: str, subject: int, optima: dict, device: torch.device,
+                     n_sims: int = 100, seed: int = 0) -> dict:
+    """Recovery metrics at each rule's optimum (SPEC H9). optima: {rule: (eta, gamma,
+    alpha)} with rules from src/rules_landscape.RULES."""
+    from src.kernel_additive import TritonRuleGNM
+    from src.landscape import load_griffa
+    from src.rules_landscape import RULES
+    D, target, _ = load_griffa(scale)
+    D = D.to(device)
+    A_t = target(subject).to(device)
+    T = int(A_t.sum()) // 2
+    from src import evaluation as ev
+    out = {"scale": scale, "subject": subject, "n": int(D.shape[0]), "T": T, "optima": optima}
+    targets = ev.Targets.from_adjacency(A_t, D)
+    for r, (e, g, a) in optima.items():
+        torch.manual_seed(seed * 1_000_003 + subject * 1009 + sorted(RULES).index(r))
+        full = lambda x: torch.full((n_sims,), x, dtype=torch.float32, device=device)  # noqa: E731
+        sim = TritonRuleGNM(D, full(e), full(g), full(a), **RULES[r])
+        edges = sim.run(T)
+        assert int(sim.A[0].sum()) == 2 * T
+        out[r] = metrics(sim.A, A_t, D)
+        # held-out energy: fresh networks at the optimum (the landscape minimum is biased
+        # low by the search over many noisy cells)
+        ks = ev.evaluate(sim.A, D, targets, C=sim.C, deg=sim.deg, edges=edges).ks[:, 0]
+        out[r]["heldout_energy"] = float(ks.amax(-1).mean())
+        out[r]["heldout_energy_sd"] = float(ks.amax(-1).std())
+        out[r]["heldout_ks"] = ks.mean(0).tolist()
+        del sim, edges
+    return out

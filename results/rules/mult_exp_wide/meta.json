@@ -1,0 +1,20 @@
+{
+  "run": "mult_exp_wide",
+  "rule": "mult_exp",
+  "grid": {
+    "eta_lo": -2.0,
+    "eta_hi": 0.0,
+    "n_eta": 41,
+    "gamma_lo": -10.0,
+    "gamma_hi": 10.0,
+    "n_gamma": 41,
+    "alpha_lo": 1.0,
+    "alpha_hi": 1.0,
+    "n_alpha": 1,
+    "repeats": 20
+  },
+  "seed": 0,
+  "gpu": "H100",
+  "git": "bba36f225a111c099ab1b60ec7ce5be56b6be232-dirty",
+  "started": "Sat Nov 21 23:34:14 2026"
+}

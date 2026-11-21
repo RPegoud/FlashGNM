@@ -88,3 +88,24 @@ def test_cochran_q_homogeneous_vs_heterogeneous():
     Q0, p0 = ai.cochran_q(rng.normal(0, 0.1, 200), v)
     Q1, p1 = ai.cochran_q(rng.normal(0, 0.3, 200), v)
     assert p0 > 0.01 and p1 < 1e-6
+
+
+def test_voronoi_search_concentrates_on_minimum():
+    """Synthetic 3-D landscape with a noisy minimum: later levels sample near it, all
+    points stay in the box, and fixed parameters stay fixed."""
+    from src import voronoi_search as vs
+    rng = np.random.default_rng(0)
+    target = np.array([-1.0, 2.0, 0.5])
+
+    def f(p):
+        return 0.2 + np.abs(p - target).sum(1) / 10 + rng.normal(0, 0.01, len(p))
+
+    lo, hi = np.array([-2, -10, 0.0]), np.array([0, 10, 10.0])
+    P, E, lvl = vs.search(f, lo, hi, ndraw=300, nlvl=5, seed=1)
+    assert P.shape == (1500, 3) and np.all(P >= lo) and np.all(P <= hi)
+    d0 = np.abs(P[lvl == 0] - target).sum(1).mean()
+    d4 = np.abs(P[lvl == 4] - target).sum(1).mean()
+    assert d4 < d0 / 2
+    # 2-D with a fixed third parameter
+    P2, _, _ = vs.search(f, lo, np.array([0, 10, 0.0]), ndraw=200, nlvl=3, seed=2)
+    assert np.all(P2[:, 2] == 0.0)

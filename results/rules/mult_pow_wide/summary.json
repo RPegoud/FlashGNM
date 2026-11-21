@@ -1,0 +1,80 @@
+{
+  "033": {
+    "subjects": 70,
+    "rule": "mult_pow",
+    "E_opt": 0.25763022254472184,
+    "E_opt_sd": 0.06263904786746825,
+    "eta_opt": -5.0,
+    "eta_iqr": [
+      -5.75,
+      -4.5
+    ],
+    "gamma_opt": 0.5,
+    "gamma_iqr": [
+      0.5,
+      0.5
+    ],
+    "alpha_opt": 1.0,
+    "alpha_iqr": [
+      1.0,
+      1.0
+    ],
+    "near_cells": 11.0,
+    "cells": 1681,
+    "near_share": 0.006543723973825104,
+    "near_eta_width": 2.75,
+    "near_gamma_width": 0.0,
+    "near_alpha_width": 0.0,
+    "interior": 70,
+    "binding": {
+      "degree": 2,
+      "clustering": 35,
+      "betweenness": 10,
+      "edge_length": 23
+    },
+    "all_valid": true,
+    "rec_per_step": 0.16530739662984106,
+    "resyncs_per_sim": 14.651472337894111,
+    "t_gen_s": 0.442623270999988,
+    "t_eval_s": 0.07240592249998201
+  },
+  "125": {
+    "subjects": 70,
+    "rule": "mult_pow",
+    "E_opt": 0.28024094617027184,
+    "E_opt_sd": 0.03673492911345863,
+    "eta_opt": -3.625,
+    "eta_iqr": [
+      -4.9375,
+      -3.3125
+    ],
+    "gamma_opt": 0.5,
+    "gamma_iqr": [
+      0.0,
+      0.5
+    ],
+    "alpha_opt": 1.0,
+    "alpha_iqr": [
+      1.0,
+      1.0
+    ],
+    "near_cells": 4.0,
+    "cells": 1681,
+    "near_share": 0.002379535990481856,
+    "near_eta_width": 1.75,
+    "near_gamma_width": 0.5,
+    "near_alpha_width": 0.0,
+    "interior": 70,
+    "binding": {
+      "degree": 29,
+      "clustering": 15,
+      "betweenness": 3,
+      "edge_length": 23
+    },
+    "all_valid": true,
+    "rec_per_step": 0.1297937004679575,
+    "resyncs_per_sim": 39.169616299821534,
+    "t_gen_s": 5.726930793999994,
+    "t_eval_s": 0.784724218500001
+  }
+}
