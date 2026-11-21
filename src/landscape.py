@@ -123,7 +123,7 @@ def encode_ks(ks: torch.Tensor, den: np.ndarray) -> np.ndarray:
 @torch.no_grad()
 def run_subject(scale: str, subject: int, grid: Grid, device: torch.device,
                 batch: int | None = None, seed: int = 0, n_validate: int = 4,
-                mem_bytes: int = 8 * 1024**3, log=print) -> dict:
+                mem_bytes: int = 8 * 1024**3, log=print, bc_dtype: str = "float64") -> dict:
     from src import evaluation as ev
     from src.kernel import TritonGNM
 
@@ -134,7 +134,8 @@ def run_subject(scale: str, subject: int, grid: Grid, device: torch.device,
     D = D.to(device)
     D1 = D.clone()
     D1.fill_diagonal_(1.0)  # the kernel's contract: masked diagonal, avoids 0 ** eta
-    targets = ev.Targets.from_adjacency(A_t.to(device), D)
+    bcd = getattr(torch, bc_dtype)
+    targets = ev.Targets.from_adjacency(A_t.to(device), D, bc_dtype=bcd)
     eta, gamma = grid.params()
     N = len(eta)
     batch = batch or default_batch(n)
@@ -156,7 +157,7 @@ def run_subject(scale: str, subject: int, grid: Grid, device: torch.device,
         sync()
         t2 = time.perf_counter()
         res = ev.evaluate(sim.A, D, targets, C=sim.C, deg=sim.deg, edges=edges,
-                          mem_bytes=mem_bytes)
+                          mem_bytes=mem_bytes, bc_dtype=bcd)
         ks[lo:hi] = res.ks[:, 0].cpu()
         sync()
         t3 = time.perf_counter()
@@ -174,7 +175,7 @@ def run_subject(scale: str, subject: int, grid: Grid, device: torch.device,
         "gammas": grid.gammas,
         "meta": json.dumps({
             "scale": scale, "subject": subject, "n": n, "T": T, "grid": asdict(grid),
-            "batch": batch, "seed": seed, "stats": list(ev.STATS),
+            "batch": batch, "seed": seed, "stats": list(ev.STATS), "bc_dtype": bc_dtype,
             "t_gen_s": t_gen, "t_eval_s": t_eval,
             "t_total_s": time.perf_counter() - t_start,
             "validation": {

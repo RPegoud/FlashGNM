@@ -228,24 +228,25 @@ class Targets:
     """Sorted samples of each statistic for S target networks."""
 
     stats: dict[str, Samples]
+    bc_dtype: torch.dtype = torch.float64
 
     @property
     def S(self) -> int:
         return self.stats["degree"].values.shape[0]
 
     @staticmethod
-    def from_adjacency(A: torch.Tensor, D: torch.Tensor,
-                       mem_bytes: int = _DEFAULT_MEM) -> "Targets":
+    def from_adjacency(A: torch.Tensor, D: torch.Tensor, mem_bytes: int = _DEFAULT_MEM,
+                       bc_dtype: torch.dtype = torch.float64) -> "Targets":
         """A [S, n, n] (or [n, n]) binary symmetric targets, zero diagonal."""
         if A.dim() == 2:
             A = A[None]
         A = A.bool()
         s = network_stats(A, D, mem_bytes=mem_bytes)
-        s["betweenness"] = Samples.full(betweenness(A, mem_bytes=mem_bytes))
-        return Targets(s)
+        s["betweenness"] = Samples.full(betweenness(A, dtype=bc_dtype, mem_bytes=mem_bytes))
+        return Targets(s, bc_dtype)
 
     def to(self, device) -> "Targets":
-        return Targets({k: v.to(device) for k, v in self.stats.items()})
+        return Targets({k: v.to(device) for k, v in self.stats.items()}, self.bc_dtype)
 
 
 def network_stats(A: torch.Tensor, D: torch.Tensor, C: torch.Tensor | None = None,
@@ -286,7 +287,7 @@ def evaluate(A: torch.Tensor, D: torch.Tensor, targets: Targets,
              C: torch.Tensor | None = None, deg: torch.Tensor | None = None,
              edges: torch.Tensor | None = None, n_edges: torch.Tensor | None = None,
              prune: bool = False, margin: float = 0.0, chunk: int | None = None,
-             mem_bytes: int = _DEFAULT_MEM) -> Evaluation:
+             mem_bytes: int = _DEFAULT_MEM, bc_dtype: torch.dtype = torch.float64) -> Evaluation:
     """Energy of B simulated networks A [B, n, n] (bool) against S targets.
 
     C [B, n, n], deg [B, n], edges [B, T, 2] (and n_edges [B]) are the kernel's outputs;
@@ -299,11 +300,15 @@ def evaluate(A: torch.Tensor, D: torch.Tensor, targets: Targets,
         and a lower-bound energy: don't average pruned energies into landscape means.
     chunk: networks per betweenness batch when pruning (smaller prunes at a finer grain,
         larger keeps the GPU busier). Default: B / 8, capped by mem_bytes.
+    bc_dtype: betweenness precision. fp32 is 10-30x faster on cards with slow fp64 (L4,
+        A10, L40S, T4); targets are always scored in the same dtype as the networks.
     """
     B, n, _ = A.shape
     S = targets.S
     dev = A.device
     t = targets.to(dev)
+    if bc_dtype != torch.float64 and t.bc_dtype != bc_dtype:
+        raise ValueError("score targets with the same bc_dtype (Targets.from_adjacency)")
     stats = network_stats(A, D, C=C, deg=deg, edges=edges, n_edges=n_edges, mem_bytes=mem_bytes)
     ks = torch.full((B, S, len(STATS)), math.nan, dtype=torch.float64, device=dev)
     for name in CHEAP:
@@ -312,7 +317,7 @@ def evaluate(A: torch.Tensor, D: torch.Tensor, targets: Targets,
     exact = torch.zeros(B, dtype=torch.bool, device=dev)
 
     def score(idx):
-        bc = betweenness(A[idx], mem_bytes=mem_bytes)
+        bc = betweenness(A[idx], dtype=bc_dtype, mem_bytes=mem_bytes)
         ks[idx, :, BETW] = ks_2samp(Samples.full(bc), t.stats["betweenness"], mem_bytes)
         exact[idx] = True
 
