@@ -1,0 +1,18 @@
+{
+  "identifier": "PMC7048793",
+  "slug": "majka2020-marmoset-atlas",
+  "doi": "10.1038/s41467-020-14858-0",
+  "pmcids": [
+    "PMC7048793"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC7048793.1/PMC7048793.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 6160252,
+  "sha256": "6f5309d3cba32db3387062b41b4deff64dea170f0e748c76e1c048e17ba72c45",
+  "pages": 14,
+  "note": "published PMC7048793.1",
+  "log": []
+}

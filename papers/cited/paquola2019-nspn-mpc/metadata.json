@@ -1,0 +1,18 @@
+{
+  "identifier": "PMC6855802",
+  "slug": "paquola2019-nspn-mpc",
+  "doi": "10.7554/eLife.50482",
+  "pmcids": [
+    "PMC6855802"
+  ],
+  "url_used": "https://cdn.elifesciences.org/articles/50482/elife-50482-v1.pdf",
+  "route": "elife API+CDN (vor v1)",
+  "license": "CC-BY-4.0",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 5960871,
+  "sha256": "c1c124fe5c7daa6b400bf128dfa29d9897332276cead63b58f0a5d140f426118",
+  "pages": 23,
+  "note": "",
+  "log": []
+}

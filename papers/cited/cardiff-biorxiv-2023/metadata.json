@@ -1,0 +1,18 @@
+{
+  "identifier": "10.1101/2023.10.30.564863",
+  "slug": "cardiff-biorxiv-2023",
+  "doi": "10.1101/2023.10.30.564863",
+  "pmcids": [
+    "PMC11424039"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC11424039.1/PMC11424039.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 1755502,
+  "sha256": "aba212bad3b3cb5d0a2f05f2a4d7b02e495901ff052a76d9f18354a06172c6ad",
+  "pages": 19,
+  "note": "published PMC11424039.1",
+  "log": []
+}

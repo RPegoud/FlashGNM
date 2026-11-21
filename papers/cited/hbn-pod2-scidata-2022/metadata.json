@@ -1,0 +1,19 @@
+{
+  "identifier": "10.1038/s41597-022-01695-7",
+  "slug": "hbn-pod2-scidata-2022",
+  "doi": "10.1038/s41597-022-01695-7",
+  "pmcids": [
+    "PMC9556519",
+    "PMC9556519"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC9556519.1/PMC9556519.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 6877175,
+  "sha256": "99fbf1c9bea7a9542448ac3f700a52e0f9e8b84e86d1cfdaa504c0cf7f91a1b2",
+  "pages": 27,
+  "note": "published PMC9556519.1",
+  "log": []
+}

@@ -1,0 +1,18 @@
+{
+  "identifier": "PMC10899629",
+  "slug": "yim2024-dauer-connectome",
+  "doi": "10.1038/s41467-024-45943-3",
+  "pmcids": [
+    "PMC10899629"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC10899629.1/PMC10899629.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 4562836,
+  "sha256": "5dd92852831ae5ef3a4fe09b4482edf64911f15640f59bae6ea812bb2c7cc2c2",
+  "pages": 14,
+  "note": "published PMC10899629.1",
+  "log": []
+}

@@ -1,0 +1,20 @@
+{
+  "identifier": "10.1038/s41597-024-03058-w",
+  "slug": "abcd-scidata-2024",
+  "doi": "10.1038/s41597-024-03058-w",
+  "pmcids": [
+    "PMC10899197",
+    "PMC10899197",
+    "PMC10104063"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC10899197.1/PMC10899197.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 6230127,
+  "sha256": "7a6c7c0f14b73ce16554781c298f625b3cf82470d1daa53358ffa3143a77d212",
+  "pages": 22,
+  "note": "published PMC10899197.1",
+  "log": []
+}

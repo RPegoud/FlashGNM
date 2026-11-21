@@ -1,0 +1,19 @@
+{
+  "identifier": "10.1038/s41597-022-01329-y",
+  "slug": "nki-rs-scidata-2022",
+  "doi": "10.1038/s41597-022-01329-y",
+  "pmcids": [
+    "PMC9197863",
+    "PMC9197863"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC9197863.1/PMC9197863.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 5058733,
+  "sha256": "e9dd21f7d601471543adb84bd0abad35a28473479df1cd4200bdecb7d7045e77",
+  "pages": 24,
+  "note": "published PMC9197863.1",
+  "log": []
+}

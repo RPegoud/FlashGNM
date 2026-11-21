@@ -1,0 +1,22 @@
+{
+  "identifier": "PMC6151176",
+  "slug": "bcp-overview-PMC6151176",
+  "doi": "10.1016/j.neuroimage.2018.03.049",
+  "pmcids": [
+    "PMC6151176"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC6151176.1/PMC6151176.1.xml",
+  "route": "pmc-oa-opendata S3 XML",
+  "license": "TDM",
+  "kind": "xml",
+  "file": "paper.xml",
+  "bytes": 235034,
+  "sha256": "d50cdf3558aa90c4fbfa0f16e430b98bff25455b4cb50701b2ad4dceba3be757",
+  "pages": null,
+  "note": "full-text XML only",
+  "log": [
+    "PMC6151176.1: no PDF in bucket (manuscript, license TDM)",
+    "resolver candidate skipped (closed host): https://doi.org/10.17615/fppy-e402",
+    "resolver candidate skipped (closed host): https://www.ncbi.nlm.nih.gov/pmc/articles/6151176"
+  ]
+}

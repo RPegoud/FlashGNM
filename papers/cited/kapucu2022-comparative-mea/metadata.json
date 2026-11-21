@@ -1,0 +1,18 @@
+{
+  "identifier": "PMC8969177",
+  "slug": "kapucu2022-comparative-mea",
+  "doi": "10.1038/s41597-022-01242-4",
+  "pmcids": [
+    "PMC8969177"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC8969177.1/PMC8969177.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 2781282,
+  "sha256": "7adf70c6f4cdfe85a18420d1ff5ed694e9fcdd7b198685b2ed6e4e7dc27dfcc2",
+  "pages": 10,
+  "note": "published PMC8969177.1",
+  "log": []
+}

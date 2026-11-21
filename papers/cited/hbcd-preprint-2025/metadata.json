@@ -1,0 +1,18 @@
+{
+  "identifier": "10.1101/2025.11.10.687672",
+  "slug": "hbcd-preprint-2025",
+  "doi": "10.1101/2025.11.10.687672",
+  "pmcids": [
+    "PMC13734816"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC13734816.1/PMC13734816.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 29834881,
+  "sha256": "ce2d456279b4c5feddcc92aa47f289eaef5b83b444bd9269baac8791f11844b1",
+  "pages": 17,
+  "note": "published PMC13734816.1",
+  "log": []
+}

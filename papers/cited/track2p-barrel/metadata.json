@@ -1,0 +1,16 @@
+{
+  "identifier": "10.7554/eLife.107540",
+  "slug": "track2p-barrel",
+  "doi": "10.7554/eLife.107540",
+  "pmcids": [],
+  "url_used": "https://cdn.elifesciences.org/articles/107540/elife-107540-v2.pdf",
+  "route": "elife API+CDN (vor v2)",
+  "license": "CC-BY-4.0",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 6365496,
+  "sha256": "3a75e2f1f343bc81762609dcf99bd4ae240a44990ea918c258743c198094ffb3",
+  "pages": 25,
+  "note": "",
+  "log": []
+}

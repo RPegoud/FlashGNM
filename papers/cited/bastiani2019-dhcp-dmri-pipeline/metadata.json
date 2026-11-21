@@ -1,0 +1,20 @@
+{
+  "identifier": "PMC6299258",
+  "slug": "bastiani2019-dhcp-dmri-pipeline",
+  "doi": "10.1016/j.neuroimage.2018.05.064",
+  "pmcids": [
+    "PMC6299258"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC6299258.1/PMC6299258.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 6552893,
+  "sha256": "655f1dfe498eef9cd50af572be61de9f4cdcd31a9e737a6696e7c28498105b40",
+  "pages": 14,
+  "note": "published PMC6299258.1",
+  "log": [
+    "PMC6299258.2: no PDF in bucket (manuscript, license TDM)"
+  ]
+}

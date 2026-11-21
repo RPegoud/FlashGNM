@@ -1,0 +1,19 @@
+{
+  "identifier": "10.1038/s41597-023-02377-8",
+  "slug": "devccnp",
+  "doi": "10.1038/s41597-023-02377-8",
+  "pmcids": [
+    "PMC10442366",
+    "PMC10442366"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC10442366.1/PMC10442366.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 4740452,
+  "sha256": "bd8a39851a909b5d199e6eb9cf72f0e263c32c1a48644960c98720cac2ce2dbd",
+  "pages": 24,
+  "note": "PMC-published PMC10442366.1",
+  "log": []
+}

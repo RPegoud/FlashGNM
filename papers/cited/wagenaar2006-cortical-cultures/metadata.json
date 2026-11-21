@@ -1,0 +1,18 @@
+{
+  "identifier": "PMC1420316",
+  "slug": "wagenaar2006-cortical-cultures",
+  "doi": "10.1186/1471-2202-7-11",
+  "pmcids": [
+    "PMC1420316"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC1420316.1/PMC1420316.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 6759295,
+  "sha256": "4c2824935b191ae8572729b002939a18f02436d65531d3e8189e9fce6b4b83b9",
+  "pages": 18,
+  "note": "published PMC1420316.1",
+  "log": []
+}

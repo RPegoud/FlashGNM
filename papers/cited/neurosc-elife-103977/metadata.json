@@ -1,0 +1,16 @@
+{
+  "identifier": "elife:103977",
+  "slug": "neurosc-elife-103977",
+  "doi": null,
+  "pmcids": [],
+  "url_used": "https://cdn.elifesciences.org/articles/103977/elife-103977-v1.pdf",
+  "route": "elife API+CDN (vor v1)",
+  "license": "CC-BY-4.0",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 9616444,
+  "sha256": "c88629b4f3be17529459d43bae88f2c64176410c30b1b913294ebc8b32e484b8",
+  "pages": 28,
+  "note": "",
+  "log": []
+}

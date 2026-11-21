@@ -1,0 +1,20 @@
+{
+  "identifier": "PMC6484842",
+  "slug": "harms2018-hcp-lifespan-protocols",
+  "doi": "10.1016/j.neuroimage.2018.09.060",
+  "pmcids": [
+    "PMC6484842"
+  ],
+  "url_used": "https://kclpure.kcl.ac.uk/ws/files/101510263/Extending_the_human_connectome_HARRIS_Firstonline24September2018_GREEN_AAM_CC_BY_NC_ND_.pdf",
+  "route": "Europe PMC-listed OA link",
+  "license": null,
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 2024209,
+  "sha256": "8c758d71b9871820d3ee2f0ca9c6dfe74cb67f5cbfba7a736e4853ce0eeea497",
+  "pages": 52,
+  "note": "",
+  "log": [
+    "PMC6484842.1: no PDF in bucket (manuscript, license TDM)"
+  ]
+}

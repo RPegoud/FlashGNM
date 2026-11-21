@@ -1,0 +1,18 @@
+{
+  "identifier": "PMC5428658",
+  "slug": "gholipour2017-fetal-atlas",
+  "doi": "10.1038/s41598-017-00525-w",
+  "pmcids": [
+    "PMC5428658"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC5428658.1/PMC5428658.1.pdf",
+  "route": "pmc-oa-opendata S3",
+  "license": "CC BY",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 2470276,
+  "sha256": "155fccc03c972ad64c77d52802b760309f8f26b472ed230bf9699d30fff41cf2",
+  "pages": 13,
+  "note": "published PMC5428658.1",
+  "log": []
+}

@@ -1,0 +1,16 @@
+{
+  "identifier": "elife:29089",
+  "slug": "gerhard2017-larval-nociceptive",
+  "doi": null,
+  "pmcids": [],
+  "url_used": "https://cdn.elifesciences.org/articles/29089/elife-29089-v2.pdf",
+  "route": "elife API+CDN (vor v2)",
+  "license": "CC-BY-4.0",
+  "kind": "pdf",
+  "file": "paper.pdf",
+  "bytes": 2627021,
+  "sha256": "d36ff0a96edfb2329f308070748969fc4001e883499bc12f2b60b815d6254bd2",
+  "pages": 17,
+  "note": "",
+  "log": []
+}

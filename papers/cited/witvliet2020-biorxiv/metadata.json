@@ -1,0 +1,23 @@
+{
+  "identifier": "10.1101/2020.04.30.066209",
+  "slug": "witvliet2020-biorxiv",
+  "doi": "10.1101/2020.04.30.066209",
+  "pmcids": [
+    "PMC8756380"
+  ],
+  "url_used": "https://pmc-oa-opendata.s3.amazonaws.com/PMC8756380.1/PMC8756380.1.xml",
+  "route": "pmc-oa-opendata S3 XML",
+  "license": "TDM",
+  "kind": "xml",
+  "file": "paper.xml",
+  "bytes": 157356,
+  "sha256": "d27ab423c69b630769d14f913078408299f911927222c65ae7a86e0faf45c051",
+  "pages": null,
+  "note": "full-text XML only",
+  "log": [
+    "resolver candidate skipped (closed host): https://doi.org/10.1101/2020.04.30.066209",
+    "preprint has published version doi:10.1038/s41586-021-03778-8",
+    "PMC8756380.1: no PDF in bucket (manuscript, license TDM)",
+    "resolver candidate skipped (closed host): https://pmc.ncbi.nlm.nih.gov/articles/PMC8756380/"
+  ]
+}
