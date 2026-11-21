@@ -103,14 +103,15 @@ def binary_gnm_kernel(
     SHARED_UNIFORM: tl.constexpr,  # sample with U instead of tl.rand
 ):
     pid = tl.program_id(0)
-    sim = pid.to(tl.int64) * N * N  # int64: B * N^2 overflows int32
+    pid64 = pid.to(tl.int64)  # int64 offsets: B * N^2 and B * 2T overflow int32 at large B
+    sim = pid64 * N * N
     A_ptr += sim
     C_ptr += sim
-    R_ptr += pid * N
-    Deg_ptr += pid * N
-    U_ptr += pid * 2 * T
-    Edges_ptr += pid * 2 * T
-    Out_ptr += pid * 2 * T
+    R_ptr += pid64 * N
+    Deg_ptr += pid64 * N
+    U_ptr += pid64 * 2 * T
+    Edges_ptr += pid64 * 2 * T
+    Out_ptr += pid64 * 2 * T
 
     cols = tl.arange(0, BLOCK_N)
     mask = cols < N
@@ -205,23 +206,43 @@ class TritonGNM:
         self.R = self._init_R()
 
     # -- initial state
-    def _sim_P(self, b: int) -> torch.Tensor:
-        """Full recompute of P for simulation b."""
-        A, deg = self.A[b], self.deg[b]
-        denom = (deg.unsqueeze(-2) + deg.unsqueeze(-1) - 2 * A) / 2
-        denom = torch.where(denom == 0, torch.ones_like(denom), denom)
-        K = self.C[b] / denom
-        K = torch.where(K == 0, K + OFFSET, K)
-        P = (self.D.pow(self.eta[b]) * K.pow(self.gamma[b]) + OFFSET) * ~A
-        return P.fill_diagonal_(0.0)
+    # Bytes of temporaries per (simulation, pair) in _block_P + its fp64 row sum: ~7 fp32
+    # tensors and the fp64 copy that sum(dtype=float64) makes. Rounded up.
+    INIT_BYTES_PER_PAIR = 40
 
-    def _init_R(self):
-        """fp64 row sums of P, one simulation at a time (B x n x n temporaries OOM at
-        n = 2000, B = 1024); P itself is discarded. The per-simulation Python loop is most
-        of the setup cost at small n (results/26-11-21_14-41-53_sim_triton_proto)."""
+    def _block_P(self, s: int, e: int) -> torch.Tensor:
+        """Full recompute of P for simulations s:e, [e - s, n, n] float32."""
+        A = self.A[s:e]
+        deg = self.deg[s:e].to(torch.float32)
+        denom = (deg.unsqueeze(-2) + deg.unsqueeze(-1) - 2 * A.to(torch.float32)) / 2
+        denom.masked_fill_(denom == 0, 1.0)
+        K = self.C[s:e].to(torch.float32).div_(denom)
+        del denom
+        K.masked_fill_(K == 0, OFFSET)
+        P = K.pow_(self.gamma[s:e].view(-1, 1, 1))
+        P.mul_(self.D.pow(self.eta[s:e].view(-1, 1, 1))).add_(OFFSET)
+        P.masked_fill_(A, 0.0)
+        P.diagonal(dim1=-2, dim2=-1).zero_()
+        return P
+
+    def init_block_size(self, budget_bytes: int | None = None) -> int:
+        """Simulations per block in _init_R: a quarter of free GPU memory (max 8 GB) by
+        default, so the whole batch is one block at small n."""
+        if budget_bytes is None:
+            free = (torch.cuda.mem_get_info(self.device)[0]
+                    if self.device.type == "cuda" else 2**30)
+            budget_bytes = min(free // 4, 8 * 2**30)
+        per_sim = self.INIT_BYTES_PER_PAIR * self.N * self.N
+        return max(1, min(self.B, budget_bytes // per_sim))
+
+    def _init_R(self, block: int | None = None) -> torch.Tensor:
+        """fp64 row sums of P, computed in blocks of simulations (B x n x n temporaries
+        OOM at n = 2000, B = 1024); P itself is discarded."""
+        block = block or self.init_block_size()
         R = torch.empty(self.B, self.N, device=self.device, dtype=torch.float64)
-        for b in range(self.B):
-            R[b] = self._sim_P(b).sum(-1, dtype=torch.float64)
+        for s in range(0, self.B, block):
+            e = min(s + block, self.B)
+            R[s:e] = self._block_P(s, e).sum(-1, dtype=torch.float64)
         return R
 
     # -- stepping
