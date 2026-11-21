@@ -1,10 +1,10 @@
 """How often does a row's max of K over non-edges decrease, per step? (SPEC §4.1 worst case)
 Multiplicative-rule trajectories at the Griffa optima (toolbox K: mean-degree denominator,
-zero -> 1e-6). Counts rows k != i, j whose argmax column is i or j and whose max drops."""
+zero -> 1e-6). Counts rows k != i, j whose argmax column is i or j and whose max drops.
 
 Result (2026-11-21, Griffa subject 0, seed 0): extra row recomputes per step, mean / p99 /
 max: n = 68: 1.13 / 4 / 6; n = 219: 1.39 / 5 / 9; n = 1000: 1.63 / 6 / 13. Ties (max
-unchanged) 6-10% of them.
+unchanged) 6-10% of them."""
 import sys
 import time
 
