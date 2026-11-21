@@ -34,6 +34,10 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 GRIFFA = ROOT / "data" / "griffa"
 SCALES = {"033": 68, "060": 114, "125": 219, "250": 448, "500": 1000}
+# Synthetic-subject null (SPEC H5): (eta, gamma) per scale = median optimum over the 70
+# Griffa subjects (results/landscape_griffa_full/summary.md).
+NULL_PARAMS = {"033": (-1.8, 2.3), "060": (-1.7, 2.0), "125": (-1.5, 1.85),
+               "250": (-1.4, 1.5), "500": (-1.3, 1.1)}
 
 
 @dataclass
@@ -121,15 +125,37 @@ def encode_ks(ks: torch.Tensor, den: np.ndarray) -> np.ndarray:
 
 
 @torch.no_grad()
+def null_target(scale: str, subject: int, device: torch.device, seed: int = 0) -> torch.Tensor:
+    """Synthetic subject: one model network at NULL_PARAMS[scale] with T = the real
+    subject's edge count, so the null keeps the cohort's spread of T. [n, n] bool on CPU."""
+    from src.kernel import TritonGNM
+
+    D, target_fn, _ = load_griffa(scale)
+    T = int(target_fn(subject).sum()) // 2
+    D1 = D.to(device)
+    D1.fill_diagonal_(1.0)
+    eta, gamma = NULL_PARAMS[scale]
+    torch.manual_seed(seed * 1_000_003 + subject * 1009 + 7_777_777)  # disjoint from fits
+    sim = TritonGNM(D1, torch.tensor([eta], device=device), torch.tensor([gamma], device=device))
+    sim.run(T)
+    A = sim.A[0].cpu()
+    assert int(A.sum()) == 2 * T and torch.equal(A, A.T)
+    return A
+
+
+@torch.no_grad()
 def run_subject(scale: str, subject: int, grid: Grid, device: torch.device,
                 batch: int | None = None, seed: int = 0, n_validate: int = 4,
-                mem_bytes: int = 8 * 1024**3, log=print) -> dict:
+                mem_bytes: int = 8 * 1024**3, log=print,
+                target: torch.Tensor | None = None) -> dict:
+    """target: [n, n] bool network to fit instead of the subject's own (e.g. null_target);
+    T is its edge count."""
     from src import evaluation as ev
     from src.kernel import TritonGNM
 
     D, target_fn, _ = load_griffa(scale)
     n = D.shape[0]
-    A_t = target_fn(subject)
+    A_t = target_fn(subject) if target is None else target.cpu().bool()
     T = int(A_t.sum()) // 2
     D = D.to(device)
     D1 = D.clone()
@@ -174,6 +200,7 @@ def run_subject(scale: str, subject: int, grid: Grid, device: torch.device,
         "gammas": grid.gammas,
         "meta": json.dumps({
             "scale": scale, "subject": subject, "n": n, "T": T, "grid": asdict(grid),
+            "target": "griffa" if target is None else "custom",
             "batch": batch, "seed": seed, "stats": list(ev.STATS),
             "t_gen_s": t_gen, "t_eval_s": t_eval,
             "t_total_s": time.perf_counter() - t_start,
