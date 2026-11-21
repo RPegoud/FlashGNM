@@ -1,0 +1,8 @@
+{
+  "n_sims": 100,
+  "seed": 0,
+  "git": "aee73ad783945d0b7516d5d12ea0e5b4edbf8a43",
+  "landscapes": "results/landscape_griffa_full",
+  "gpu": "H100",
+  "started": "Sat Nov 21 21:39:51 2026"
+}

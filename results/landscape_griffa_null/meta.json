@@ -1,0 +1,17 @@
+{
+  "run": "griffa_null",
+  "grid": {
+    "eta_lo": -4.0,
+    "eta_hi": 1.0,
+    "n_eta": 51,
+    "gamma_lo": -1.0,
+    "gamma_hi": 4.0,
+    "n_gamma": 51,
+    "repeats": 20
+  },
+  "seed": 0,
+  "null": true,
+  "gpu": "H100",
+  "git": "aee73ad783945d0b7516d5d12ea0e5b4edbf8a43",
+  "started": "Sat Nov 21 21:39:49 2026"
+}

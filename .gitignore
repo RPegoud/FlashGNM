@@ -9,3 +9,5 @@ dist/
 # profiler traces are large
 results/**/trace_*.json
 results/griffa_raw/
+results/landscape_*/scale*/
+results/landscape_*/plots/

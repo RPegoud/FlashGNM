@@ -1,0 +1,17 @@
+{
+  "run": "griffa_fine250",
+  "grid": {
+    "eta_lo": -1.7,
+    "eta_hi": -1.1,
+    "n_eta": 31,
+    "gamma_lo": 0.8,
+    "gamma_hi": 2.3,
+    "n_gamma": 31,
+    "repeats": 20
+  },
+  "seed": 0,
+  "null": false,
+  "gpu": "H100",
+  "git": "aee73ad783945d0b7516d5d12ea0e5b4edbf8a43",
+  "started": "Sat Nov 21 21:39:49 2026"
+}

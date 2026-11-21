@@ -1,0 +1,64 @@
+{
+  "run": "results/landscape_griffa_fine250",
+  "boot": 500,
+  "seed": 0,
+  "scales": {
+    "250": {
+      "subjects": 70,
+      "eta": {
+        "median": -1.42,
+        "between_sd": 0.02134213069126569,
+        "within_sd": 0.013064656466682284,
+        "noise_share": 0.37473170486427393,
+        "Q": 187.8186680915028,
+        "Q_df": 69,
+        "Q_p": 6.115496711186365e-13,
+        "single_run_within_sd": 0.028027673170772566,
+        "single_run_between_sd": 0.034219321179266335
+      },
+      "gamma": {
+        "median": 1.5,
+        "between_sd": 0.10911131702580437,
+        "within_sd": 0.0826699255204216,
+        "noise_share": 0.5740576341588006,
+        "Q": 135.74642911589245,
+        "Q_df": 69,
+        "Q_p": 2.9280545191585373e-06,
+        "single_run_within_sd": 0.1508370186136681,
+        "single_run_between_sd": 0.17089130523246743
+      },
+      "corr_replicated": 0.4907771948662352,
+      "corr_replicated_p": 1.6081649578066606e-05,
+      "corr_single_run": {
+        "mean": 0.3816272030378344,
+        "min": 0.15898396732655065,
+        "max": 0.589257568785411
+      },
+      "within_boot_corr_median": 0.0474550259863354,
+      "within_boot_corr_defined": 70,
+      "single_run": {
+        "step_x1": {
+          "median_abs_d_eta": 0.040000000000000036,
+          "p90_abs_d_eta": 0.08000000000000007,
+          "median_abs_d_gamma": 0.10000000000000009,
+          "p90_abs_d_gamma": 0.30000000000000004,
+          "in_near_share": 0.2764285714285714
+        },
+        "step_x2": {
+          "median_abs_d_eta": 0.020000000000000018,
+          "p90_abs_d_eta": 0.06000000000000005,
+          "median_abs_d_gamma": 0.1499999999999999,
+          "p90_abs_d_gamma": 0.30000000000000004,
+          "in_near_share": 0.33714285714285713
+        },
+        "step_x5": {
+          "median_abs_d_eta": 0.020000000000000018,
+          "p90_abs_d_eta": 0.06000000000000005,
+          "median_abs_d_gamma": 0.1499999999999999,
+          "p90_abs_d_gamma": 0.3550000000000067,
+          "in_near_share": 0.37714285714285717
+        }
+      }
+    }
+  }
+}

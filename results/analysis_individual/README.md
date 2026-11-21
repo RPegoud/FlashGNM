@@ -24,8 +24,12 @@ test, df 69 (small p = subjects differ beyond noise).
 - eta: subjects are indistinguishable from estimation noise at 4 of 5 scales. At n >= 448
   the within SD is mostly grid quantisation (step 0.1): a finer grid is needed before
   reading anything into eta there (planned: `griffa_fine250/500`).
-- gamma: real between-subject differences at every scale; the noise share falls from 76%
-  (n = 68) to 32% (n = 1000).
+- gamma: Q flags heterogeneity at every scale, BUT Q is miscalibrated: it is equally
+  significant on the synthetic-subject null (p ~ 1e-20, `../analysis_null/`), where every
+  "subject" has the same true parameters. The bootstrap over repeats misses the main noise
+  source, which is that the target is itself one random network. Use the null comparison
+  (`../FINDINGS.md`) instead: real subjects spread no more than the null at n <= 219, and
+  more than it only at n = 1000 (gamma SD 0.13 vs 0.07, F p 8e-7).
 
 ## eta-gamma correlation across subjects (cf. Akarca et al. 2021)
 
