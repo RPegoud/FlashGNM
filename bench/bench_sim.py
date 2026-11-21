@@ -232,11 +232,14 @@ def check_edges(sim, B, n, T):
         A = sim.state().get("A")
     if A is None:
         return None
-    A = A.reshape(B, n, n).bool()
-    sym = torch.equal(A, A.transpose(-2, -1))
-    diag = bool(A.diagonal(dim1=-2, dim2=-1).any())
-    counts = A.sum((-2, -1))
-    return bool(sym and not diag and (counts == 2 * T).all())
+    A = A.reshape(B, n, n)
+    for b in range(B):  # one simulation at a time: the check must not need B x n^2 temporaries
+        a = A[b].bool()
+        if a.diagonal().any() or not torch.equal(a, a.T):
+            return False
+        if int(a.sum(dtype=torch.int32)) != 2 * T:
+            return False
+    return True
 
 
 def bench_one(impl, n, B, T, dist0, dist_src, args, device) -> dict:
@@ -267,13 +270,13 @@ def bench_one(impl, n, B, T, dist0, dist_src, args, device) -> dict:
             run_s, _ = timed(lambda: impl.run(sim, T), device)
         setups.append(setup_s)
         runs.append(run_s)
-        if not impl.extrapolated and "edges_ok" not in row:
-            row["edges_ok"] = check_edges(sim, B, n, T)
-        del sim
-        if device.type == "cuda":
+        if device.type == "cuda":  # before check_edges, which allocates
             row["peak_mem_gb"] = max(
                 row.get("peak_mem_gb", 0.0), torch.cuda.max_memory_allocated(device) / 1e9
             )
+        if not impl.extrapolated and "edges_ok" not in row:
+            row["edges_ok"] = check_edges(sim, B, n, T)
+        del sim
         free(device)
         if impl.extrapolated and run_s > args.slow_s:
             break  # one repeat is enough for a baseline this slow
