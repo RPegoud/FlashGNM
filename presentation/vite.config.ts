@@ -6,7 +6,14 @@ import ffmpeg from '@motion-canvas/ffmpeg';
 export default defineConfig({
   plugins: [
     motionCanvas({
-      project: ['./src/clip1_wiring.ts'],
+      project: [
+        './src/clip1_wiring.ts',
+        './src/clip2_naive.ts',
+        './src/clip3_chain.ts',
+        './src/clip4_matrices.ts',
+        './src/clip5_kernel.ts',
+        './src/clip6_bench.ts',
+      ],
     }),
     ffmpeg(),
   ],

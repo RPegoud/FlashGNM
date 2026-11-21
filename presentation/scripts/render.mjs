@@ -11,12 +11,14 @@
 import puppeteer from 'puppeteer';
 import {createServer} from 'vite';
 import {execFileSync} from 'node:child_process';
-import {existsSync, mkdirSync, statSync, openSync, closeSync, unlinkSync, readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, statSync, openSync, closeSync, unlinkSync, readFileSync, writeFileSync, renameSync} from 'node:fs';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 const project = process.argv[2];
 if (!project) throw new Error('usage: node scripts/render.mjs <project>');
 const ffmpeg = ffmpegInstaller.path;
+// With several projects the editor serves /src/<name> and writes output/src/<name>.mp4.
+const outCandidates = [`output/src/${project}.mp4`, `output/${project}.mp4`];
 const out = `output/${project}.mp4`;
 mkdirSync('output', {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -80,7 +82,8 @@ page.on('console', m => {
 });
 page.on('pageerror', e => console.log('  pageerror:', e.message.slice(0, 500)));
 
-const before = existsSync(out) ? statSync(out).mtimeMs : 0;
+const mtime = f => (existsSync(f) ? statSync(f).mtimeMs : 0);
+const before = Object.fromEntries(outCandidates.map(f => [f, mtime(f)]));
 const hasButton = label => page.evaluate(l => [...document.querySelectorAll('button')].some(b => b.innerText.trim() === l), label);
 
 // A frozen page (e.g. an infinite loop in a scene) makes every CDP call hang, so wrap
@@ -88,9 +91,10 @@ const hasButton = label => page.evaluate(l => [...document.querySelectorAll('but
 const within = (p, ms, what) => Promise.race([p, sleep(ms).then(() => { throw new Error(`timed out: ${what}`); })]);
 
 try {
-  // With several projects the editor serves each at /<name>; with one it is at /.
-  const resp = await within(page.goto(`http://127.0.0.1:${port}/${project}`, {waitUntil: 'load'}), 150000, 'page load');
-  if (resp.status() === 404) await within(page.goto(`http://127.0.0.1:${port}/`, {waitUntil: 'load'}), 150000, 'page load');
+  for (const path of [`/src/${project}`, `/${project}`, `/`]) {
+    const resp = await within(page.goto(`http://127.0.0.1:${port}${path}`, {waitUntil: 'load'}), 150000, 'page load');
+    if (resp.status() !== 404) break;
+  }
   const t1 = Date.now();
   while (!(await within(hasButton('RENDER'), 30000, 'editor UI (page frozen? check scene for infinite loops)'))) {
     if (Date.now() - t1 > 150000) throw new Error('editor did not show RENDER button');
@@ -129,10 +133,12 @@ try { await browser.close(); } catch {}
 try { await server.close(); } catch {}
 release();
 
-if (!existsSync(out) || statSync(out).mtimeMs <= before) {
-  console.error(`ERROR: ${out} was not written`);
+const written = outCandidates.find(f => mtime(f) > before[f]);
+if (!written) {
+  console.error(`ERROR: none of ${outCandidates.join(', ')} was written`);
   process.exit(1);
 }
+if (written !== out) renameSync(written, out);
 console.log(`rendered ${out} in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 
 // ------------------------------------------------------------------ split per beat
