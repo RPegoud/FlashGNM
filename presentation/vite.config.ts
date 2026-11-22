@@ -18,6 +18,7 @@ export default defineConfig({
         './src/clip9_chance.ts',
         './src/talkA_connectome.ts',
         './src/talkB_parallel.ts',
+        './src/talkC_payoff.ts',
       ],
     }),
     ffmpeg(),

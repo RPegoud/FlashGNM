@@ -43,5 +43,48 @@
    "sims_per_s": 2303.8433317419126
   },
   "rows_per_step": 4
+ },
+ "memory": {
+  "source": [
+   "results/26-11-21_14-40-12_sim_baseline/results.jsonl",
+   "results/26-11-21_15-42-39_sim_v2_bigB/results.jsonl"
+  ],
+  "per_n": [
+   {
+    "n": 1000,
+    "toolbox": {
+     "B": 1024,
+     "peak_gb": 50.216019456,
+     "mb_per_sim": 49.039081499999995,
+     "oom_at": []
+    },
+    "ours": {
+     "B": 16384,
+     "peak_gb": 51.89259008,
+     "mb_per_sim": 3.1672723437499997,
+     "oom_at": []
+    }
+   },
+   {
+    "n": 2000,
+    "toolbox": {
+     "B": 64,
+     "peak_gb": 12.595472896,
+     "mb_per_sim": 196.80426400000002,
+     "oom_at": [
+      1024
+     ]
+    },
+    "ours": {
+     "B": 4096,
+     "peak_gb": 51.797616128,
+     "mb_per_sim": 12.645902375,
+     "oom_at": [
+      8192,
+      16384
+     ]
+    }
+   }
+  ]
  }
 }

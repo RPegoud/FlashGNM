@@ -61,6 +61,30 @@ def parallel(n: int = 1000) -> dict:
     }
 
 
+def memory() -> dict:
+    """GPU memory per simulation (peak / B, largest batch that ran) and whether B fits."""
+    rows = lambda run: [json.loads(l) for l in open(ROOT / "results" / run / "results.jsonl")]
+    base = rows("26-11-21_14-40-12_sim_baseline")
+    big = rows("26-11-21_15-42-39_sim_v2_bigB")
+    out = {"source": ["results/26-11-21_14-40-12_sim_baseline/results.jsonl",
+                      "results/26-11-21_15-42-39_sim_v2_bigB/results.jsonl"], "per_n": []}
+    for n in (1000, 2000):
+        tb = [r for r in base if r["impl"] == "toolbox" and r["n"] == n]
+        ok_t = max((r for r in tb if r["status"] == "ok"), key=lambda r: r["B"])
+        ou = [r for r in big if r["n"] == n]
+        ok_o = max((r for r in ou if r["status"] == "ok"), key=lambda r: r["B"])
+        out["per_n"].append({
+            "n": n,
+            "toolbox": {"B": ok_t["B"], "peak_gb": ok_t["peak_mem_gb"],
+                        "mb_per_sim": 1000 * ok_t["peak_mem_gb"] / ok_t["B"],
+                        "oom_at": [r["B"] for r in tb if r["status"] == "oom"]},
+            "ours": {"B": ok_o["B"], "peak_gb": ok_o["peak_mem_gb"],
+                     "mb_per_sim": 1000 * ok_o["peak_mem_gb"] / ok_o["B"],
+                     "oom_at": [r["B"] for r in ou if r["status"] == "oom"]},
+        })
+    return out
+
+
 def connectome(scale: str = "500", subject: int = 0) -> dict:
     d = np.load(ROOT / f"data/griffa/scale{scale}.npz", allow_pickle=True)
     xyz = d["xyz"].astype(float)
@@ -83,7 +107,11 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     lc = landscape_cost()
     pa = parallel()
-    (OUT / "talk.json").write_text(json.dumps({"landscape": lc, "parallel": pa}, indent=1))
+    me = memory()
+    (OUT / "talk.json").write_text(json.dumps({"landscape": lc, "parallel": pa, "memory": me}, indent=1))
+    for m in me["per_n"]:
+        print(f"memory n={m['n']}: toolbox {m['toolbox']['mb_per_sim']:.0f} MB/sim (B={m['toolbox']['B']}, oom {m['toolbox']['oom_at']}); "
+              f"ours {m['ours']['mb_per_sim']:.1f} MB/sim (B={m['ours']['B']}, oom {m['ours']['oom_at']})")
     print(f"parallel n={pa['n']}: toolbox B={pa['toolbox']['B']} {pa['toolbox']['peak_gb']:.1f} GB "
           f"{pa['toolbox']['sims_per_s']:.3f}/s; ours B={pa['ours_max']['B']} {pa['ours_max']['peak_gb']:.1f} GB "
           f"{pa['ours_max']['sims_per_s']:.0f}/s")
