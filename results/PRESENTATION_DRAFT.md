@@ -13,7 +13,7 @@ runs.
 | A1 | The kernel is orders of magnitude faster than the toolbox on the same GPU | n = 1000, B = 1024: 2,217 vs ~0.1 sims/s (~20,000x); n = 68: 237k vs 336 sims/s (~700x) | Toolbox times are extrapolated from timed probe steps; same H100 [`26-11-21_*_sim_*`] |
 | A2 | Every result run is validated, and the kernel matches the reference implementations | Full-run checks on every batch; 61 GPU tests for the rule kernel; reference = literal port of Oldham's MATLAB to 1e-9; classic kernel statistically indistinguishable from the toolbox (300 networks each, all KS p > 1e-3) | Toolbox check: AAL, 90 regions, one parameter setting. Oldham check: our port of their formula, not their code run |
 | A3 | Fitted models match the *distributions*, not the *wiring*: recall equals chance in every distance bin | Classic rule, n = 68 to 1000; all three rule forms at n = 68, 219; leave-one-out group consensus is 3x to 125x above chance at > 60 mm [`recovery/`, `rules/recovery/`]. The consensus network recovers ~10x more edges yet has about the same energy as the model (n = 1000: 0.327 vs 0.330); at n = 219 the additive model *beats* it on energy for 50/70 subjects [`consensus_energy/`] | "Chance" = the model's own edge density in that bin. Euclidean distances. |
-| A4 | Single-run fitting overstates the fit, most for the flexible rule | Oldham-style search: its optimum lands in the right neighbourhood, but the energy it reports is 0.02 to 0.13 lower than fresh networks deliver there. The optimism is largest for the additive rule (+0.090 at n = 219 vs +0.023 to +0.040; +0.133 at n = 68 vs +0.060 to +0.104). Reported energies exaggerate the additive rule's advantage ~3x at n = 219 and reverse the true ranking at n = 68 [`rules/voronoi_vs_grid.md`]. Secondary: its exact pick is outside the replicated grid's statistically tied set for 36/49 checkable subjects (median 0.019 worse held-out) | Our port of their search, on our data. Don't claim it finds the wrong region: it doesn't |
+| A4 | Single-run fitting overstates the fit, most for the flexible rule; replicating each point fixes it | Oldham-style search: finds the right region, but the energy it reports is 0.02 to 0.14 lower than fresh networks deliver (median per subject); the optimism is largest for the additive rule (+0.143 at n = 68, +0.086 at n = 219 vs +0.019 to +0.104), so reported energies exaggerate its advantage. **The same search with 20 simulations per point** (200k per subject, enabled by the kernel): optimism +0.015, and its pick matches the replicated grid (additive, n = 219: held-out 0.179 vs 0.180, p 0.57). At equal budget (5 x 400 x 5), replication makes fits honest (optimism +0.002 to +0.046) but can miss narrow optima (multiplicative-exponential rule much worse) [`rules/voronoi_vs_grid.md`, `rules/README.md` §4] | Our port of their search, on our data. 20-repeat search run for the additive rule only. Don't claim it finds the wrong region: it doesn't |
 
 **B: say it with the qualifier attached.**
 
@@ -51,7 +51,7 @@ runs.
 
 | Time | Beat | Animation | Line |
 |---|---|---|---|
-| 3:00 | **One run per point fools you [A4, B1]** | S1, then S2 | "We grew 70 synthetic subjects with *identical* parameters. Fitted the usual way, they show the same eta-gamma correlation as real subjects. And Oldham's single-run search finds the right region, but reports a fit fresh networks can't reproduce, most of all for the flexible additive rule. Compared on reported energies, the additive rule looks three times better than it is, and at 68 regions the ranking flips." |
+| 3:00 | **One run per point fools you [A4, B1]** | S1, then S2 | "We grew 70 synthetic subjects with *identical* parameters. Fitted the usual way, they show the same eta-gamma correlation as real subjects. And Oldham's single-run search finds the right region, but reports a fit fresh networks can't reproduce, most of all for the flexible additive rule. Run the same search with 20 simulations per point, which our kernel makes cheap, and the reported fit becomes honest and matches a full replicated grid." |
 | 4:05 | **Distributions, not wiring [A3]** | S3 | "At the best fit, every model, classic or additive, at every resolution, places edges no better than chance in each distance bin. Other people's brains predict the edges ten times better, yet score the same energy. The metric rewards statistics, not wiring." |
 | 4:45 | Close [B2, B3] | static | "And the gap to real variability grows with resolution. Questions we can now afford to ask: dense tractography, per-subject uncertainty." |
 
@@ -96,6 +96,18 @@ reported fit, and that it flatters the flexible rule most.
     is".
 - **Beat E (optional, n = 68):** the reported ranking (additive tied best) flips on fresh
   networks (additive worst: 0.233 vs 0.219 and 0.220).
+- **Beat F (closing, the positive note):** "same search, 20 simulations per point". Re-run
+  the waves for subject 42 with each dot averaged; the best point pulses "reported 0.160";
+  fresh networks land at 0.171, so the two bars almost touch.
+  - Caption: "replicate every point and the search tells the truth: optimism 0.015
+    (median), same optimum as a full replicated grid".
+  - Numbers per subject 42: single run 0.119 -> 0.205; 20 repeats 0.160 -> 0.171.
+  - Data: `results/rules/vorB_add_exp/scale125/sub42.json` (`params`, `energy`,
+    `energy_sd`, `level`; also on the Modal volume `vorB_add_exp`),
+    `_reported` in `results/rules/optima_vorB.json`, held-out in
+    `results/rules/recovery_vorB/scale125.jsonl`.
+  - Optional footnote: at their 10,000-simulation budget, replication alone isn't enough;
+    with fewer points the search can miss narrow optima. Speed provides both.
 - **Data:**
   - `results/rules/vor_add_exp/scale125/sub42.json` (`params`, `ks`, `level`; also on the
     Modal volume `vor_add_exp`);

@@ -1,17 +1,18 @@
-"""Oldham et al.'s Voronoi search (one simulation per point) against replicated grids (H3, H9).
+"""Oldham et al.'s Voronoi search against replicated grids (H3, H9), with replicated
+variants of the search.
 
-    python src/compare_voronoi.py optima        # -> results/rules/optima_vor.json
-    modal run src/modal_rules.py::recovery --optima results/rules/optima_vor.json \
-        --out results/rules/recovery_vor
-    python src/compare_voronoi.py compare       # -> results/rules/voronoi_vs_grid.md
+    python src/compare_voronoi.py optima VARIANT     # -> results/rules/optima_<VARIANT>.json
+    modal run src/modal_rules.py::recovery --optima results/rules/optima_<VARIANT>.json \
+        --out results/rules/recovery_<VARIANT>
+    python src/compare_voronoi.py compare            # -> results/rules/voronoi_vs_grid.md
 
-Per subject and rule:
-- the search's optimum: the point with the lowest single-run maxKS (as in their code);
-- its reported energy (that single run) against the held-out energy of fresh networks at
-  the same point (winner's curse), and against the held-out energy at the replicated
-  zoom grid's optimum;
-- where it lands relative to the zoom grid's optimum, per parameter.
-Across subjects: spread of the optima and the eta-gamma correlation, search vs grid.
+Variants (run directories results/rules/<prefix>_<rule>):
+    vor   their procedure: 5 levels x 2000 points, 1 simulation per point   (10,000 sims)
+    vorA  same budget, replicated: 5 x 400 points x 5 simulations          (10,000 sims)
+    vorB  their points, replicated: 5 x 2000 points x 20 simulations        (200,000 sims)
+The search's optimum is the point with the lowest (mean) energy. Its "reported" energy is
+that value; the held-out energy is the mean over 100 fresh networks at the same point.
+The replicated zoom grid's optimum, scored the same way, is the reference.
 """
 
 from __future__ import annotations
@@ -27,18 +28,21 @@ ROOT = Path(__file__).resolve().parents[1]
 RULES = ["add_exp", "mult_exp", "mult_pow"]
 SCALES = ["033", "125"]
 R = ROOT / "results" / "rules"
+VARIANTS = {"vor": "single run (their procedure)", "vorA": "same budget, 5 repeats",
+            "vorB": "20 repeats per point"}
 
 
-def vor_optima():
+def optima(prefix: str) -> dict:
     out = {}
     for rule in RULES:
         for s in SCALES:
-            for f in sorted((R / f"vor_{rule}" / f"scale{s}").glob("sub*.json")):
+            for f in sorted((R / f"{prefix}_{rule}" / f"scale{s}").glob("sub*.json")):
                 v = json.loads(f.read_text())
-                E = np.max(np.array(v["ks"]), -1)
+                E = np.array(v["energy"]) if "energy" in v else np.max(np.array(v["ks"]), -1)
                 k = int(np.argmin(E))
-                out.setdefault(s, {}).setdefault(str(v["subject"]), {})[rule] = v["params"][k]
-                out[s][str(v["subject"])].setdefault("_reported", {})[rule] = float(E[k])
+                d = out.setdefault(s, {}).setdefault(str(v["subject"]), {})
+                d[rule] = v["params"][k]
+                d.setdefault("_reported", {})[rule] = float(E[k])
     return out
 
 
@@ -47,28 +51,32 @@ def jl(path):
 
 
 def compare():
-    vo = json.loads((R / "optima_vor.json").read_text())
-    rows = ["| rule | n | search: reported energy | search: held-out at its optimum | grid: held-out at its optimum | search worse than grid (subjects) | Wilcoxon p | median abs. diff from grid optimum (eta, gamma, alpha) | between-subject SD of gamma, search / grid | corr(eta, gamma), search / grid |",
-            "|---|---:|---:|---:|---:|---:|---:|---|---|---|"]
-    for s in SCALES:
-        hv = jl(R / "recovery_vor" / f"scale{s}.jsonl")
-        hg = jl(R / "recovery" / f"scale{s}.jsonl")
-        n = {"033": 68, "125": 219}[s]
-        for rule in RULES:
-            subs = sorted(int(k) for k in vo[s])
-            rep = np.array([vo[s][str(i)]["_reported"][rule] for i in subs])
-            ev = np.array([hv[(s, i)][rule]["heldout_energy"] for i in subs])
-            eg = np.array([hg[(s, i)][rule]["heldout_energy"] for i in subs])
-            pv = np.array([vo[s][str(i)][rule] for i in subs])  # eta, gamma, alpha
-            pg = np.array([hg[(s, i)]["optima"][rule] for i in subs])
-            d = np.median(np.abs(pv - pg), 0)
-            dl = ", ".join(f"{x:.2f}" for x in (d if rule == "add_exp" else d[:2]))
-            corr_v = stats.pearsonr(pv[:, 0], pv[:, 1])[0]
-            corr_g = stats.pearsonr(pg[:, 0], pg[:, 1])[0] if pg[:, 1].std() > 0 else float("nan")
-            rows.append(
-                f"| {rule} | {n} | {np.median(rep):.3f} | {np.median(ev):.3f} | {np.median(eg):.3f} | "
-                f"{(ev > eg).sum()}/70 | {stats.wilcoxon(ev - eg).pvalue:.1e} | {dl} | "
-                f"{pv[:, 1].std(ddof=1):.2f} / {pg[:, 1].std(ddof=1):.2f} | {corr_v:+.2f} / {corr_g:+.2f} |")
+    rows = ["| search | rule | n | reported | held-out at its optimum | optimism | grid held-out | worse than grid (subjects) | p |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|"]
+    for prefix, label in VARIANTS.items():
+        op = R / ("optima_vor.json" if prefix == "vor" else f"optima_{prefix}.json")
+        rec = R / ("recovery_vor" if prefix == "vor" else f"recovery_{prefix}")
+        if not op.exists() or not rec.exists():
+            continue
+        vo = json.loads(op.read_text())
+        for s in SCALES:
+            if not (rec / f"scale{s}.jsonl").exists():
+                continue
+            hv = jl(rec / f"scale{s}.jsonl")
+            hg = jl(R / "recovery" / f"scale{s}.jsonl")
+            n = {"033": 68, "125": 219}[s]
+            for rule in RULES:
+                subs = [i for i in range(70) if (s, i) in hv and rule in hv[(s, i)]]
+                if not subs:
+                    continue
+                rep = np.array([vo[s][str(i)]["_reported"][rule] for i in subs])
+                ev = np.array([hv[(s, i)][rule]["heldout_energy"] for i in subs])
+                eg = np.array([hg[(s, i)][rule]["heldout_energy"] for i in subs])
+                p = stats.wilcoxon(ev - eg).pvalue if len(subs) > 5 else float("nan")
+                rows.append(
+                    f"| {label} | {rule} | {n} | {np.median(rep):.3f} | {np.median(ev):.3f} | "
+                    f"{np.median(ev - rep):+.3f} | {np.median(eg):.3f} | "
+                    f"{(ev > eg).sum()}/{len(subs)} | {p:.1e} |")
     text = "\n".join(rows) + "\n"
     (R / "voronoi_vs_grid.md").write_text(text)
     print(text)
@@ -76,7 +84,9 @@ def compare():
 
 if __name__ == "__main__":
     if sys.argv[1] == "optima":
-        (R / "optima_vor.json").write_text(json.dumps(vor_optima(), indent=1))
-        print("wrote", R / "optima_vor.json")
+        prefix = sys.argv[2] if len(sys.argv) > 2 else "vor"
+        path = R / ("optima_vor.json" if prefix == "vor" else f"optima_{prefix}.json")
+        path.write_text(json.dumps(optima(prefix), indent=1))
+        print("wrote", path)
     else:
         compare()

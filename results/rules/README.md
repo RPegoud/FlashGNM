@@ -108,6 +108,30 @@ Same rules, published ranges, 5 levels x 2,000 points, one simulation per point.
   A Pearson correlation of single-search optima, as used for individual differences, can
   be flipped by two subjects.
 
+## 4. Replicated versions of the search (2026-11-22, `voronoi_vs_grid.md`)
+
+Same procedure (Voronoi refinement, published ranges); the mean energy over R simulations
+per point drives the cell selection and the final pick. Held-out = 100 fresh networks at
+the pick. Optimism = median over subjects of (held-out - reported).
+
+| search | budget per subject | optimism (range over rules, n = 68 / 219) | additive at n = 219: held-out vs grid |
+|---|---|---|---|
+| single run (theirs): 5 x 2000 x 1 | 10,000 | +0.053 to +0.143 / +0.019 to +0.086 | 0.204 vs 0.180, worse for 56/70 |
+| same budget: 5 x 400 x 5 | 10,000 | +0.010 to +0.046 / +0.002 to +0.024 | 0.192 vs 0.180, worse for 59/70 |
+| speed-enabled: 5 x 2000 x 20 (additive only) | 200,000 | +0.024 / +0.015 | **0.179 vs 0.180, no difference (33/70, p 0.57)** |
+
+- **Replication makes the reported fit honest**, for every rule and scale.
+- **At equal budget it trades exploration for precision.**
+  - It helps the flat additive landscape (held-out 0.279 -> 0.257 at n = 68,
+    0.204 -> 0.192 at n = 219).
+  - It hurts mult_exp badly (0.251 -> 0.277, 0.243 -> 0.295): with 5x fewer points the
+    search misses its ~0.1-wide gamma ridge.
+- **With enough simulations for both points and repeats, their search matches the
+  replicated grid** (additive, n = 219).
+  - At n = 68 a small gap remains (0.241 vs 0.233, 51/70), likely the published alpha
+    range [0, 10]: the grid's optimum is near alpha = 12.
+  - The 20-repeat variant was run for the additive rule only.
+
 ## Caveats
 
 - Griffa (deterministic tractography, Lausanne), Euclidean template distances; Oldham et

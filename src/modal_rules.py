@@ -54,7 +54,7 @@ app = modal.App("FlashGNM_rules", image=image)
 triton_vol = modal.Volume.from_name("triton_kernels", create_if_missing=True)
 out_vol = modal.Volume.from_name("flashgnm-landscapes", create_if_missing=True)
 GPU = dict(gpu="H100!", volumes={TRITON_CACHE: triton_vol, VOL_DIR: out_vol},
-           max_containers=8, retries=1)
+           max_containers=20, retries=1)
 
 
 def _commit_triton():
@@ -89,7 +89,7 @@ def grid_remote(run: str, scale: str, subject: int, rule: str, grid: dict, seed:
 
 @app.function(timeout=4 * 3600, **GPU)
 def voronoi_remote(scale: str, subjects: list, rule: str, seed: int, ndraw: int,
-                   nlvl: int) -> list:
+                   nlvl: int, repeats: int = 1) -> list:
     import os
     import threading
     from concurrent.futures import ThreadPoolExecutor
@@ -117,22 +117,29 @@ def voronoi_remote(scale: str, subjects: list, rule: str, seed: int, ndraw: int,
         store = []
 
         def evaluate(p):
-            p = torch.tensor(p, dtype=torch.float32)
+            # each point simulated `repeats` times; the mean energy drives the search
+            k = len(p)
+            p = torch.tensor(np.repeat(p, repeats, axis=0), dtype=torch.float32)
             with lock:
                 ks, info = rl.evaluate_params(A_t, D, rule, p[:, 0], p[:, 1], p[:, 2], dev,
                                               rl.default_batch(n),
                                               seed * 1_000_003 + sub * 1009 + len(store))
-            store.append((ks.numpy(), info))
-            return ks.numpy().max(-1)
+            ks = ks.numpy().reshape(k, repeats, 4)
+            e = ks.max(-1)  # [k, repeats]
+            store.append((ks.mean(1), e.mean(1), e.std(1), info))
+            return e.mean(1)
 
         P, E, lvl = vs.search(evaluate, lo, hi, ndraw=ndraw, nlvl=nlvl,
                               seed=seed * 1009 + sub)
-        ks = np.concatenate([s[0] for s in store])
+        ks = np.concatenate([s[0] for s in store])  # mean KS per point
         return {"scale": scale, "subject": sub, "rule": rule, "n": n, "T": int(A_t.sum()) // 2,
-                "params": P.tolist(), "ks": ks.tolist(), "level": lvl.tolist(),
-                "valid": all(s[1]["validation"]["ok"] for s in store),
-                "t_gen_s": sum(s[1]["t_gen_s"] for s in store),
-                "t_eval_s": sum(s[1]["t_eval_s"] for s in store),
+                "repeats": repeats, "params": P.tolist(), "ks": ks.tolist(),
+                "energy": np.concatenate([s[1] for s in store]).tolist(),
+                "energy_sd": np.concatenate([s[2] for s in store]).tolist(),
+                "level": lvl.tolist(),
+                "valid": all(s[3]["validation"]["ok"] for s in store),
+                "t_gen_s": sum(s[3]["t_gen_s"] for s in store),
+                "t_eval_s": sum(s[3]["t_eval_s"] for s in store),
                 "git": os.environ.get("GIT_SHA", "")}
 
     with ThreadPoolExecutor(4) as ex:
@@ -205,7 +212,7 @@ def grids(rule: str = "add_exp", scales: str = "033 125", subjects: str = "all",
 
 @app.local_entrypoint()
 def voronoi(rule: str = "add_exp", scales: str = "033", subjects: str = "all", run: str = "",
-            seed: int = 0, ndraw: int = 2000, nlvl: int = 5, chunk: int = 4):
+            seed: int = 0, ndraw: int = 2000, nlvl: int = 5, chunk: int = 4, repeats: int = 1):
     run = run or f"vor_{rule}"
     out = ROOT / "results" / "rules" / run
     out.mkdir(parents=True, exist_ok=True)
@@ -214,7 +221,7 @@ def voronoi(rule: str = "add_exp", scales: str = "033", subjects: str = "all", r
         subs = list(range(70)) if subjects == "all" else list(map(int, subjects.split()))
         subs = [x for x in subs if not (out / f"scale{s}" / f"sub{x:02d}.json").exists()]
         for i in range(0, len(subs), chunk):
-            jobs.append((s, subs[i:i + chunk], rule, seed, ndraw, nlvl))
+            jobs.append((s, subs[i:i + chunk], rule, seed, ndraw, nlvl, repeats))
     print(f"voronoi {run}: {len(jobs)} calls", flush=True)
     t0 = time.time()
     for res in voronoi_remote.starmap(jobs, order_outputs=False, return_exceptions=True):
@@ -225,7 +232,7 @@ def voronoi(rule: str = "add_exp", scales: str = "033", subjects: str = "all", r
             p = out / f"scale{r['scale']}" / f"sub{r['subject']:02d}.json"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(r))
-            best = min(max(k) for k in r["ks"])
+            best = min(r["energy"])
             print(f"[{time.time() - t0:6.0f}s] scale {r['scale']} sub {r['subject']:02d}: "
                   f"best {best:.3f} valid={r['valid']} gen {r['t_gen_s']:.0f}s", flush=True)
 
