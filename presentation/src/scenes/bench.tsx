@@ -35,7 +35,7 @@ const SIZE_LINE = `n = ${data.impls_n} nodes   ·   B = ${data.impls_B} simulati
 
 export default makeScene2D(function* (view) {
   view.fill(C.bg);
-  const title = header(view, '06', 'Benchmarks');
+  const title = header(view, '3', 'Benchmarks');
   const cap = caption(view);
 
   // ======================================================== beat A: what is measured

@@ -150,6 +150,18 @@ def s3(root: Path) -> dict:
     }
 
 
+def dense(root: Path) -> dict:
+    """Timing on dense targets (probabilistic-tractography-like edge counts), n = 1000."""
+    runs = sorted((root / "results").glob("*_sim_dense_T*"))
+    pts = []
+    for r in runs:
+        row = json.loads((r / "results.jsonl").read_text().splitlines()[0])
+        pts.append({"run": r.name, "n": row["n"], "B": row["B"], "T": row["T"],
+                    "sims_per_s": row["sims_per_s"], "setup_s": row["setup_s"], "run_s": row["run_s"],
+                    "peak_gb": row["peak_mem_gb"]})
+    return {"source": [f"results/{p['run']}/results.jsonl" for p in pts], "points": pts}
+
+
 def main(root: Path):
     OUT.mkdir(parents=True, exist_ok=True)
     d = s1(root)
@@ -164,6 +176,10 @@ def main(root: Path):
     print(f"S2 sub {d2['subject']}: reported {d2['best']['reported']:.3f}, fresh "
           f"{d2['heldout_search']['mean']:.3f}+-{d2['heldout_search']['sd']:.3f}, grid "
           f"{d2['heldout_grid']['mean']:.3f}; cohort {d2['cohort']}")
+    dd = dense(root)
+    (OUT / "science_dense.json").write_text(json.dumps(dd, indent=1))
+    for p in dd["points"]:
+        print(f"dense n={p['n']} T={p['T']}: B={p['B']} in {p['setup_s'] + p['run_s']:.1f} s ({p['sims_per_s']:.1f}/s, {p['peak_gb']:.2f} GB)")
     d3 = s3(root)
     (OUT / "science_s3.json").write_text(json.dumps(d3, indent=1))
     c, g = d3["classic"][2], d3["consensus"][2]

@@ -20,6 +20,7 @@ export default defineConfig({
         './src/talkB_parallel.ts',
         './src/talkC_payoff.ts',
         './src/talkD_papers.ts',
+        './src/talkE_enables.ts',
       ],
     }),
     ffmpeg(),
