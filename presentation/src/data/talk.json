@@ -18,5 +18,30 @@
   "ours_s_per_subject_median": 75.80086992550001,
   "ours_s_cohort_total": 5482.872403214001,
   "toolbox_s_cohort_total": 40839829.276691996
+ },
+ "parallel": {
+  "source": [
+   "results/26-11-21_14-40-12_sim_baseline/results.jsonl",
+   "results/26-11-21_15-42-39_sim_v2_bigB/results.jsonl"
+  ],
+  "n": 1000,
+  "T": 10785,
+  "toolbox": {
+   "B": 1024,
+   "peak_gb": 50.216019456,
+   "sims_per_s": 0.08916295842789457,
+   "extrapolated": true
+  },
+  "ours_1024": {
+   "B": 1024,
+   "peak_gb": 5.65690112,
+   "sims_per_s": 2217.159169891459
+  },
+  "ours_max": {
+   "B": 16384,
+   "peak_gb": 51.89259008,
+   "sims_per_s": 2303.8433317419126
+  },
+  "rows_per_step": 4
  }
 }

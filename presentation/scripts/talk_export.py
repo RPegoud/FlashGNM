@@ -41,6 +41,26 @@ def landscape_cost() -> dict:
     }
 
 
+def parallel(n: int = 1000) -> dict:
+    """How many simulations fit side by side on one H100 at n regions, and how fast."""
+    rows = lambda run: [json.loads(l) for l in open(ROOT / "results" / run / "results.jsonl")]
+    tb = next(r for r in rows("26-11-21_14-40-12_sim_baseline")
+              if r["impl"] == "toolbox" and r["n"] == n and r["B"] == 1024)
+    ours = [r for r in rows("26-11-21_15-42-39_sim_v2_bigB") if r["n"] == n and r["status"] == "ok"]
+    big = max(ours, key=lambda r: r["B"])
+    small = next(r for r in ours if r["B"] == 1024)
+    return {
+        "source": ["results/26-11-21_14-40-12_sim_baseline/results.jsonl",
+                   "results/26-11-21_15-42-39_sim_v2_bigB/results.jsonl"],
+        "n": n, "T": tb["T"],
+        "toolbox": {"B": tb["B"], "peak_gb": tb["peak_mem_gb"], "sims_per_s": tb["sims_per_s"],
+                    "extrapolated": bool(tb.get("extrapolated"))},
+        "ours_1024": {"B": small["B"], "peak_gb": small["peak_mem_gb"], "sims_per_s": small["sims_per_s"]},
+        "ours_max": {"B": big["B"], "peak_gb": big["peak_mem_gb"], "sims_per_s": big["sims_per_s"]},
+        "rows_per_step": 4,  # src/kernel.py: old and new rows i and j of P computed each step
+    }
+
+
 def connectome(scale: str = "500", subject: int = 0) -> dict:
     d = np.load(ROOT / f"data/griffa/scale{scale}.npz", allow_pickle=True)
     xyz = d["xyz"].astype(float)
@@ -62,7 +82,11 @@ def connectome(scale: str = "500", subject: int = 0) -> dict:
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     lc = landscape_cost()
-    (OUT / "talk.json").write_text(json.dumps({"landscape": lc}, indent=1))
+    pa = parallel()
+    (OUT / "talk.json").write_text(json.dumps({"landscape": lc, "parallel": pa}, indent=1))
+    print(f"parallel n={pa['n']}: toolbox B={pa['toolbox']['B']} {pa['toolbox']['peak_gb']:.1f} GB "
+          f"{pa['toolbox']['sims_per_s']:.3f}/s; ours B={pa['ours_max']['B']} {pa['ours_max']['peak_gb']:.1f} GB "
+          f"{pa['ours_max']['sims_per_s']:.0f}/s")
     print(f"landscape: {lc['sims_per_subject']:,} sims/subject; toolbox "
           f"{lc['toolbox_s_per_subject'] / 86400:.2f} days vs ours {lc['ours_s_per_subject_median']:.1f} s; "
           f"cohort {lc['toolbox_s_cohort_total'] / 86400 / 365:.2f} yr vs {lc['ours_s_cohort_total'] / 3600:.2f} h")

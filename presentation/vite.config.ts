@@ -17,6 +17,7 @@ export default defineConfig({
         './src/clip8_luckiest.ts',
         './src/clip9_chance.ts',
         './src/talkA_connectome.ts',
+        './src/talkB_parallel.ts',
       ],
     }),
     ffmpeg(),
