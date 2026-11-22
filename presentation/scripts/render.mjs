@@ -11,7 +11,7 @@
 import puppeteer from 'puppeteer';
 import {createServer} from 'vite';
 import {execFileSync} from 'node:child_process';
-import {existsSync, mkdirSync, statSync, openSync, closeSync, unlinkSync, readFileSync, writeFileSync, renameSync} from 'node:fs';
+import {existsSync, mkdirSync, statSync, openSync, closeSync, unlinkSync, readFileSync, writeFileSync, renameSync, rmSync} from 'node:fs';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 const project = process.argv[2];
@@ -144,6 +144,7 @@ console.log(`rendered ${out} in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 // ------------------------------------------------------------------ split per beat
 const list = [...beats.entries()].sort((a, b) => a[1] - b[1]);
 console.log('beats:', list.map(([n, t]) => `${n}@${t.toFixed(2)}`).join(' '));
+rmSync(`output/${project}`, {recursive: true, force: true}); // drop stale beats from older renders
 mkdirSync(`output/${project}`, {recursive: true});
 for (let k = 0; k < list.length - 1; k++) {
   const [name, start] = list[k];
