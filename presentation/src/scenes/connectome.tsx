@@ -40,8 +40,8 @@ export default makeScene2D(function* (view) {
       <Txt ref={before} fontFamily={MONO} fontSize={120} fill={C.muted} x={-275} y={0} opacity={0} text={`${days(L.toolbox_s_per_subject)} days`} />
       <Txt ref={arrow} fontFamily={MONO} fontSize={110} fill={C.mint} x={125} y={0} opacity={0} text="→" />
       <Txt ref={after} fontFamily={MONO} fontSize={120} fill={C.green} fontWeight={700} x={415} y={0} opacity={0} text={`${Math.round(L.ours_s_per_subject_median)} s`} />
-      <Txt fontFamily={FONT} fontSize={26} fill={C.muted} y={150} opacity={0}
-        text={`${comma(L.sims_per_subject)} simulated networks · reference toolbox (extrapolated) vs our GPU kernel (measured) · one H100`} />
+      <Txt fontFamily={FONT} fontSize={26} fill={C.muted} y={165} opacity={0} textAlign={'center'} lineHeight={40}
+        text={`${comma(L.sims_per_subject)} simulated networks per person: ${L.grid[0]} × ${L.grid[1]} parameter grid × ${L.repeats} repeats\nreference toolbox (extrapolated) vs our GPU kernel (measured) · one H100`} />
     </Node>,
   );
   const [line1, , , , foot] = open().children() as Txt[];
