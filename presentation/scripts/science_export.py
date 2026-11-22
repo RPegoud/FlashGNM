@@ -77,6 +77,50 @@ def s1(root: Path) -> dict:
     return out
 
 
+def s2(root: Path, subject: int = 42, scale: str = "125", rule: str = "add_exp") -> dict:
+    """Luckiest of 10,000: Oldham-style single-run search vs replicated grid (A4).
+    Same statistics as src/compare_voronoi.py on the analysis branch."""
+    R = root / "results/rules"
+    v = json.loads((R / f"vor_{rule}/scale{scale}/sub{subject}.json").read_text())
+    P = np.array(v["params"])
+    E = np.max(np.array(v["ks"]), -1)
+    L = np.array(v["level"])
+    k = int(np.argmin(E))
+    jl = lambda f: {(r["scale"], r["subject"]): r for r in map(json.loads, open(f))}
+    hv = jl(R / f"recovery_vor/scale{scale}.jsonl")
+    hg = jl(R / f"recovery/scale{scale}.jsonl")
+    vo = json.loads((R / "optima_vor.json").read_text())[scale]
+    subs = sorted(int(x) for x in vo)
+    rep = np.array([vo[str(i)]["_reported"][rule] for i in subs])
+    ev = np.array([hv[(scale, i)][rule]["heldout_energy"] for i in subs])
+    eg = np.array([hg[(scale, i)][rule]["heldout_energy"] for i in subs])
+    a, b = hv[(scale, subject)][rule], hg[(scale, subject)][rule]
+    assert abs(vo[str(subject)]["_reported"][rule] - E[k]) < 1e-12
+    return {
+        "source": [f"results/rules/vor_{rule}/scale{scale}/sub{subject}.json",
+                   f"results/rules/recovery_vor/scale{scale}.jsonl",
+                   f"results/rules/recovery/scale{scale}.jsonl",
+                   "results/rules/optima_vor.json", "results/rules/voronoi_vs_grid.md"],
+        "subject": subject, "n": int(v["n"]), "rule": rule, "T": int(v["T"]),
+        "n_levels": int(L.max() + 1), "per_level": int((L == 0).sum()),
+        # eta, gamma, level (alpha not shown in the (eta, gamma) projection)
+        "points": [[round(float(P[i, 0]), 4), round(float(P[i, 1]), 3), int(L[i])] for i in range(len(P))],
+        "best": {"eta": float(P[k, 0]), "gamma": float(P[k, 1]), "alpha": float(P[k, 2]),
+                 "reported": float(E[k])},
+        "heldout_search": {"mean": a["heldout_energy"], "sd": a["heldout_energy_sd"]},
+        "heldout_grid": {"mean": b["heldout_energy"], "sd": b["heldout_energy_sd"],
+                         "optimum": hg[(scale, subject)]["optima"][rule]},
+        "n_fresh": 100,  # modal_rules.py recovery(n_sims=100)
+        "cohort": {"worse": int((ev > eg).sum()), "n": len(subs),
+                   "wilcoxon_p": float(stats.wilcoxon(ev - eg).pvalue),
+                   "median_optimism": float(np.median(ev - rep)),
+                   "median_gap": float(np.median(ev - eg)),
+                   "subject_optimism": float(ev[subs.index(subject)] - rep[subs.index(subject)]),
+                   "subject_gap": float(ev[subs.index(subject)] - eg[subs.index(subject)])},
+        "box": {"eta": [-2.0, 0.0], "gamma": [-10.0, 10.0]},
+    }
+
+
 def main(root: Path):
     OUT.mkdir(parents=True, exist_ok=True)
     d = s1(root)
@@ -86,6 +130,11 @@ def main(root: Path):
         print(f"S1 {s}: corr real {x['corr_real']:+.3f} null {x['corr_null']:+.3f}, "
               f"sd_gamma {x['sd_gamma_real']:.3f} / {x['sd_gamma_null']:.3f}, "
               f"F p {x['F_p_gamma_real_gt_null']:.1e}")
+    d2 = s2(root)
+    (OUT / "science_s2.json").write_text(json.dumps(d2))
+    print(f"S2 sub {d2['subject']}: reported {d2['best']['reported']:.3f}, fresh "
+          f"{d2['heldout_search']['mean']:.3f}+-{d2['heldout_search']['sd']:.3f}, grid "
+          f"{d2['heldout_grid']['mean']:.3f}; cohort {d2['cohort']}")
 
 
 if __name__ == "__main__":

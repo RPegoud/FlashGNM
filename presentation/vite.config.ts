@@ -14,6 +14,7 @@ export default defineConfig({
         './src/clip5_kernel.ts',
         './src/clip6_bench.ts',
         './src/clip7_twins.ts',
+        './src/clip8_luckiest.ts',
       ],
     }),
     ffmpeg(),
