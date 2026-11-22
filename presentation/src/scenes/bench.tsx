@@ -110,9 +110,11 @@ export default makeScene2D(function* (view) {
   const LX = -430;
   const X0 = -400;
   const X1 = 470;
-  const EMIN = -2;
-  const EMAX = 4;
-  const bx = (v: number) => X0 + ((log10(v) - EMIN) / (EMAX - EMIN)) * (X1 - X0);
+  // Linear axis from 0 to the next multiple of 500 above the fastest implementation.
+  const XSTEP = 500;
+  const XMAX = Math.ceil(Math.max(...data.impls.map(d => d.sims_per_s)) / XSTEP) * XSTEP;
+  const bx = (v: number) => X0 + (v / XMAX) * (X1 - X0);
+  const xticks = Array.from({length: XMAX / XSTEP + 1}, (_, k) => k * XSTEP);
   const ROW0 = -235;
   const ROWH = 82;
   const AXY = ROW0 + data.impls.length * ROWH - 20;
@@ -123,14 +125,14 @@ export default makeScene2D(function* (view) {
       <Txt text={SIZE_LINE + '   ·   H100'} fontFamily={FONT} fontSize={30} fill={C.muted} x={-870} y={-335} offset={[-1, 0]} />
       <Txt text="speedup vs toolbox" fontFamily={FONT} fontSize={26} fill={C.muted} x={870} y={ROW0 - 62} offset={[1, 0]} />
       <Line points={[[X0, AXY], [X1 + 20, AXY]]} stroke={C.muted} lineWidth={2} />
-      {Array.from({length: EMAX - EMIN + 1}, (_, k) => EMIN + k).map(e => (
+      {xticks.map(t => (
         <Node>
-          <Line points={[[bx(10 ** e), ROW0 - 40], [bx(10 ** e), AXY]]} stroke={C.faint} lineWidth={2} />
-          <Line points={[[bx(10 ** e), AXY], [bx(10 ** e), AXY + 10]]} stroke={C.muted} lineWidth={2} />
-          <Txt text={decade(e)} fontFamily={MONO} fontSize={26} fill={C.muted} x={bx(10 ** e)} y={AXY + 34} />
+          <Line points={[[bx(t), ROW0 - 40], [bx(t), AXY]]} stroke={C.faint} lineWidth={2} />
+          <Line points={[[bx(t), AXY], [bx(t), AXY + 10]]} stroke={C.muted} lineWidth={2} />
+          <Txt text={t.toLocaleString('en-US')} fontFamily={MONO} fontSize={26} fill={C.muted} x={bx(t)} y={AXY + 34} />
         </Node>
       ))}
-      <Txt text="simulations / s   (log scale)" fontFamily={FONT} fontSize={28} fill={C.mint} x={(X0 + X1) / 2} y={AXY + 82} />
+      <Txt text="simulations / s" fontFamily={FONT} fontSize={28} fill={C.mint} x={(X0 + X1) / 2} y={AXY + 82} />
       <Txt text={`~ extrapolated from ${data.probe_steps} timed steps`} fontFamily={FONT} fontSize={26} fill={C.muted} x={870} y={AXY + 82} offset={[1, 0]} />
     </Node>,
   );
@@ -144,7 +146,7 @@ export default makeScene2D(function* (view) {
     const bar = createRef<Rect>();
     const val = createRef<Txt>();
     const sp = createRef<Txt>();
-    const w = bx(d.sims_per_s) - X0;
+    const w = Math.max(3, bx(d.sims_per_s) - X0); // baselines are slivers on a linear axis
     const group = (
       <Node y={y} opacity={0}>
         <Txt text={d.label} fontFamily={FONT} fontSize={30} fill={ours ? C.mint : C.muted} x={LX} offset={[1, 0]} />
