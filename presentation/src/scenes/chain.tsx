@@ -163,7 +163,7 @@ export default makeScene2D(function* (view) {
   yield* chain().tex(['P(i,j)', '=', '\\frac{P_{ij}}{\\sum_k R_k}'], 1.0);
   yield* waitFor(0.5);
   yield* chain().tex(['P(i,j)', '=', '\\frac{P_{ij}}{\\sum_{k,l} P_{kl}}'], 1.0);
-  yield* all(naiveBox().lineWidth(3, 0.4), chainBox().lineWidth(3, 0.4), sameTxt().opacity(1, 0.5));
+  yield* all(naiveBox().lineWidth(3, 0.4), chainBox().lineWidth(3, 0.4), sameTxt().opacity(1, 0.5), rDef().opacity(0.2, 0.4));
   yield* waitFor(1.8);
 
   // ======================================================== beat D: sample
