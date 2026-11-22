@@ -121,6 +121,35 @@ def s2(root: Path, subject: int = 42, scale: str = "125", rule: str = "add_exp")
     }
 
 
+def s3(root: Path) -> dict:
+    """Recall = chance: per distance bin, recall of the target's edges vs the model's own
+    density in that bin (A3). Mean over subjects of the per-subject records."""
+    def panel(path, model, label, n):
+        R = [json.loads(l) for l in open(path)]
+        rc = np.nanmean([r[model]["recall_per_bin"] for r in R], 0)
+        ch = np.nanmean([r[model]["chance_per_bin"] for r in R], 0)
+        return {"label": label, "n": n, "model": model, "subjects": len(R),
+                "recall": rc.tolist(), "chance": ch.tolist(),
+                "long_top25_hit": float(np.mean([r[model]["long_top25_hit"] for r in R])),
+                "long_base_rate": float(np.mean([r[model]["long_base_rate"] for r in R]))}
+    rec = root / "results/recovery"
+    rul = root / "results/rules/recovery"
+    first = json.loads(open(rec / "scale500.jsonl").readline())
+    bins = [b if np.isfinite(b) else None for b in first["homophily"]["bins_mm"]]  # inf -> null
+    return {
+        "source": ["results/recovery/scale{033,125,500}.jsonl",
+                   "results/rules/recovery/scale125.jsonl"],
+        "bins_mm": bins,
+        "classic": [panel(rec / f"scale{s}.jsonl", "homophily", "classic rule", n)
+                    for s, n in (("033", 68), ("125", 219), ("500", 1000))],
+        "rules": [panel(rul / "scale125.jsonl", m, lab, 219) for m, lab in
+                  (("add_exp", "additive rule"), ("mult_exp", "multiplicative, exponential"),
+                   ("mult_pow", "multiplicative, power law"))],
+        "consensus": [panel(rec / f"scale{s}.jsonl", "group_consensus", "other brains (group consensus)", n)
+                      for s, n in (("033", 68), ("125", 219), ("500", 1000))],
+    }
+
+
 def main(root: Path):
     OUT.mkdir(parents=True, exist_ok=True)
     d = s1(root)
@@ -135,6 +164,11 @@ def main(root: Path):
     print(f"S2 sub {d2['subject']}: reported {d2['best']['reported']:.3f}, fresh "
           f"{d2['heldout_search']['mean']:.3f}+-{d2['heldout_search']['sd']:.3f}, grid "
           f"{d2['heldout_grid']['mean']:.3f}; cohort {d2['cohort']}")
+    d3 = s3(root)
+    (OUT / "science_s3.json").write_text(json.dumps(d3, indent=1))
+    c, g = d3["classic"][2], d3["consensus"][2]
+    print(f"S3 bins {d3['bins_mm']}; n=1000 long-range top-25% hit: model {c['long_top25_hit']:.4f} "
+          f"base {c['long_base_rate']:.4f} consensus {g['long_top25_hit']:.4f}")
 
 
 if __name__ == "__main__":
