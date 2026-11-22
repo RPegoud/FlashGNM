@@ -37,7 +37,7 @@ const CX = -130; // C grid centre x
 const KX = 150; // degree vector x
 const RX0 = 215; // R bars start x
 const RLEN = 170; // max R bar length
-const PANEL = 480; // left edge of the right panel
+const PANEL = 430; // left edge of the right panel
 const rowY = (r: number) => TOP + S / 2 + r * S;
 const colX = (cx: number, c: number) => cx - (N / 2) * S + S / 2 + c * S;
 const STRIP_Y = {oldPi: 178, oldPj: 230, Pi: 306, Pj: 358};
@@ -346,7 +346,7 @@ export default makeScene2D(function* (view) {
   const cursor = createRef<Rect>();
   uiLayer().add(
     <Node ref={algo} opacity={0}>
-      <Rect ref={cursor} x={PANEL - 16} y={LY0} width={400} height={LDY - 4} radius={8} fill={C.faint} stroke={C.deep} lineWidth={2} offset={[-1, 0]} opacity={0} />
+      <Rect ref={cursor} x={PANEL - 16} y={LY0} width={450} height={LDY - 4} radius={8} fill={C.faint} stroke={C.deep} lineWidth={2} offset={[-1, 0]} opacity={0} />
     </Node>,
   );
   LINES.forEach((tex, n) => {
@@ -359,8 +359,8 @@ export default makeScene2D(function* (view) {
   algo().add(
     <>
       <Txt text="each row of P, on the fly:" fontFamily={FONT} fontSize={26} fill={C.muted} x={PANEL} y={LY0 + 10 * LDY + 34} offset={[-1, 0]} />
-      <Latex tex="P_x = D_x^{\,\eta} \odot K_x^{\,\gamma} + 10^{-6}" fill={C.mint} fontSize={32} x={PANEL} y={LY0 + 10 * LDY + 88} offset={[-1, 0]} />
-      <Latex tex="K_x = C_x \,/\, \tfrac{1}{2}(k_x + k - 2A_x)" fill={C.mint} fontSize={32} x={PANEL} y={LY0 + 10 * LDY + 146} offset={[-1, 0]} />
+      <Latex tex="P_x = D_x^{\,\eta} \odot K_x^{\,\gamma} + 10^{-6}" fill={C.mint} fontSize={30} x={PANEL} y={LY0 + 10 * LDY + 88} offset={[-1, 0]} />
+      <Latex tex="K_x = C_x \,/\, \tfrac{1}{2}(k_x + k - 2A_x)" fill={C.mint} fontSize={30} x={PANEL} y={LY0 + 10 * LDY + 146} offset={[-1, 0]} />
     </>,
   );
   function* focus(n: number) {
