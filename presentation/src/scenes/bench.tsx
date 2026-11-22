@@ -1,5 +1,5 @@
 import {Circle, Latex, Line, Node, Rect, Txt, makeScene2D} from '@motion-canvas/2d';
-import {all, createRef, easeOutCubic, sequence, waitFor} from '@motion-canvas/core';
+import {all, createRef, createSignal, easeInOutCubic, easeOutCubic, sequence, waitFor} from '@motion-canvas/core';
 import {C, FONT, MONO} from '../lib/theme';
 import {beat, caption, header} from '../lib/ui';
 import data from '../data/bench.json';
@@ -110,11 +110,22 @@ export default makeScene2D(function* (view) {
   const LX = -430;
   const X0 = -400;
   const X1 = 470;
-  // Linear axis from 0 to the next multiple of 500 above the fastest implementation.
-  const XSTEP = 500;
-  const XMAX = Math.ceil(Math.max(...data.impls.map(d => d.sims_per_s)) / XSTEP) * XSTEP;
-  const bx = (v: number) => X0 + (v / XMAX) * (X1 - X0);
-  const xticks = Array.from({length: XMAX / XSTEP + 1}, (_, k) => k * XSTEP);
+  // Linear axis that rescales as bars arrive: the largest bar shown so far spans the full
+  // width, earlier bars shrink, ticks re-pick a round step for the current range.
+  const xmax = createSignal(data.impls[0].sims_per_s);
+  const bx = (v: number) => X0 + (v / xmax()) * (X1 - X0);
+  const step = () => {
+    const raw = xmax() / 5;
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    return ([1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= raw) ?? 10 * p);
+  };
+  const tickLabel = (v: number) => {
+    for (let dp = 0; dp <= 4; dp++) {
+      if (Math.abs(Number(v.toFixed(dp)) - v) < 1e-9) return v.toLocaleString('en-US', {minimumFractionDigits: dp, maximumFractionDigits: dp});
+    }
+    return v.toPrecision(2);
+  };
+  const NTICK = 7;
   const ROW0 = -235;
   const ROWH = 82;
   const AXY = ROW0 + data.impls.length * ROWH - 20;
@@ -125,11 +136,11 @@ export default makeScene2D(function* (view) {
       <Txt text={SIZE_LINE + '   ·   H100'} fontFamily={FONT} fontSize={30} fill={C.muted} x={-870} y={-335} offset={[-1, 0]} />
       <Txt text="speedup vs toolbox" fontFamily={FONT} fontSize={26} fill={C.muted} x={870} y={ROW0 - 62} offset={[1, 0]} />
       <Line points={[[X0, AXY], [X1 + 20, AXY]]} stroke={C.muted} lineWidth={2} />
-      {xticks.map(t => (
-        <Node>
-          <Line points={[[bx(t), ROW0 - 40], [bx(t), AXY]]} stroke={C.faint} lineWidth={2} />
-          <Line points={[[bx(t), AXY], [bx(t), AXY + 10]]} stroke={C.muted} lineWidth={2} />
-          <Txt text={t.toLocaleString('en-US')} fontFamily={MONO} fontSize={26} fill={C.muted} x={bx(t)} y={AXY + 34} />
+      {Array.from({length: NTICK}, (_, k) => (
+        <Node x={() => bx(k * step())} opacity={() => (k * step() <= xmax() * 1.0001 ? 1 : 0)}>
+          <Line points={[[0, ROW0 - 40], [0, AXY]]} stroke={C.faint} lineWidth={2} />
+          <Line points={[[0, AXY], [0, AXY + 10]]} stroke={C.muted} lineWidth={2} />
+          <Txt text={() => tickLabel(k * step())} fontFamily={MONO} fontSize={26} fill={C.muted} y={AXY + 34} />
         </Node>
       ))}
       <Txt text="simulations / s" fontFamily={FONT} fontSize={28} fill={C.mint} x={(X0 + X1) / 2} y={AXY + 82} />
@@ -137,40 +148,45 @@ export default makeScene2D(function* (view) {
     </Node>,
   );
 
-  type BarRow = {group: Node; bar: Rect; val: Txt; sp: Txt; w: number};
+  type BarRow = {group: Node; val: Txt; sp: Txt; grow: ReturnType<typeof createSignal<number>>; v: number};
   const barRows: BarRow[] = data.impls.map((d, r) => {
     const y = ROW0 + r * ROWH;
     const ours = !d.extrapolated;
     const best = r === data.impls.length - 1;
     const fill = best ? C.green : ours ? C.deep : C.dim;
-    const bar = createRef<Rect>();
+    const grow = createSignal(0); // 0 -> 1 as the bar first appears
+    // tiny bars keep a 3 px sliver once a much faster implementation sets the scale
+    const w = () => grow() * Math.max(3, bx(d.sims_per_s) - X0);
     const val = createRef<Txt>();
     const sp = createRef<Txt>();
-    const w = Math.max(3, bx(d.sims_per_s) - X0); // baselines are slivers on a linear axis
     const group = (
       <Node y={y} opacity={0}>
         <Txt text={d.label} fontFamily={FONT} fontSize={30} fill={ours ? C.mint : C.muted} x={LX} offset={[1, 0]} />
-        <Rect ref={bar} x={X0} offset={[-1, 0]} width={0} height={46} radius={4} fill={fill} stroke={ours ? fill : C.muted} lineWidth={ours ? 0 : 2} />
-        <Txt ref={val} text={tilde(d) + sims(d.sims_per_s)} fontFamily={MONO} fontSize={30} fill={best ? C.green : C.mint} x={X0 + w + 18} offset={[-1, 0]} opacity={0} />
+        <Rect x={X0} offset={[-1, 0]} width={w} height={46} radius={4} fill={fill} stroke={ours ? fill : C.muted} lineWidth={ours ? 0 : 2} />
+        <Txt ref={val} text={tilde(d) + sims(d.sims_per_s)} fontFamily={MONO} fontSize={30} fill={best ? C.green : C.mint} x={() => X0 + w() + 18} offset={[-1, 0]} opacity={0} />
         <Txt ref={sp} text={r === 0 ? '1×' : `~${sig3(d.speedup_vs_toolbox)}×`} fontFamily={MONO} fontSize={32} fill={best ? C.green : ours ? C.mint : C.muted} fontWeight={best ? 700 : 400} x={870} offset={[1, 0]} opacity={0} />
       </Node>
     ) as Node;
     gB().add(group);
-    return {group, bar: bar(), val: val(), sp: sp(), w};
+    return {group, val: val(), sp: sp(), grow, v: d.sims_per_s};
   });
 
-  function* growRow(b: BarRow, d = 0.7) {
-    yield* b.group.opacity(1, 0.25);
-    yield* b.bar.width(b.w, d, easeOutCubic);
+  // Each new bar grows while the axis rescales to the largest bar shown so far.
+  let shownMax = 0;
+  function* growRow(b: BarRow, d = 0.9) {
+    shownMax = Math.max(shownMax, b.v);
+    yield* b.group.opacity(1, 0.2);
+    yield* all(b.grow(1, d, easeInOutCubic), xmax(shownMax, d, easeInOutCubic));
     yield* all(b.val.opacity(1, 0.3), b.sp.opacity(1, 0.3));
   }
 
   yield* all(axisB().opacity(1, 0.5), cap.set(`n = ${data.impls_n}, B = ${String(data.impls_B)}: every implementation on the same H100`));
-  yield* growRow(barRows[0], 0.5);
-  yield* waitFor(0.3);
-  yield* sequence(0.35, growRow(barRows[1]), growRow(barRows[2]));
+  yield* growRow(barRows[0], 0.6);
   yield* waitFor(0.4);
-  yield* sequence(0.35, growRow(barRows[3]), growRow(barRows[4]), growRow(barRows[5]));
+  for (const b of barRows.slice(1)) {
+    yield* growRow(b);
+    yield* waitFor(0.35);
+  }
   yield* cap.set(`From ~${sims(H.toolbox)} to ${sims(H.v2bi)} simulations per second`);
   yield* waitFor(2.2);
 
