@@ -1,0 +1,22 @@
+{
+  "source": "results/26-11-21_14-40-12_sim_baseline/results.jsonl",
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "probe_steps": 20,
+  "n": 1000,
+  "T": 10785,
+  "dist": "griffa scale500",
+  "toolbox": [
+    {
+      "B": 1,
+      "ms_per_step": 3.0998144000001564,
+      "run_s": 33.431498304001686,
+      "total_s": 33.434868213001685
+    },
+    {
+      "B": 1024,
+      "ms_per_step": 1064.8569470999996,
+      "run_s": 11484.482174473495,
+      "total_s": 11484.589767488495
+    }
+  ]
+}

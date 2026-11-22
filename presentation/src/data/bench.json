@@ -1,0 +1,525 @@
+{
+ "gpu": "NVIDIA H100 80GB HBM3",
+ "gpu_mem_gb": 85.031190528,
+ "probe_steps": 20,
+ "repeats": 3,
+ "ns": [
+  68,
+  219,
+  1000,
+  2000
+ ],
+ "T": {
+  "68": 610,
+  "219": 2639,
+  "1000": 10785,
+  "2000": 43162
+ },
+ "dist": {
+  "68": "griffa scale033",
+  "219": "griffa scale125",
+  "1000": "griffa scale500",
+  "2000": "synthetic make_dist"
+ },
+ "B_grid": [
+  1,
+  64,
+  1024
+ ],
+ "B_big": [
+  1024,
+  2048,
+  4096,
+  8192,
+  16384
+ ],
+ "impls_n": 1000,
+ "impls_B": 1024,
+ "impls": [
+  {
+   "key": "toolbox",
+   "label": "Toolbox (reference)",
+   "impl": "toolbox",
+   "run": "26-11-21_14-40-12_sim_baseline",
+   "status": "ok",
+   "sims_per_s": 0.08916295842789457,
+   "setup_s": 0.10759301500000618,
+   "run_s": 11484.482174473495,
+   "peak_gb": 50.216019456,
+   "extrapolated": true,
+   "speedup_vs_toolbox": 1.0
+  },
+  {
+   "key": "dense",
+   "label": "Dense baseline",
+   "impl": "leandense",
+   "run": "26-11-21_14-40-12_sim_baseline",
+   "status": "ok",
+   "sims_per_s": 0.9361571769254332,
+   "setup_s": 0.008993081999996377,
+   "run_s": 1093.8244199812464,
+   "peak_gb": 28.70656768,
+   "extrapolated": true,
+   "speedup_vs_toolbox": 10.499395639530025
+  },
+  {
+   "key": "rowsampled",
+   "label": "Row-sampled PyTorch",
+   "impl": "rowsampled",
+   "run": "26-11-21_14-40-12_sim_baseline",
+   "status": "ok",
+   "sims_per_s": 72.41888458891214,
+   "setup_s": 0.09195751499999716,
+   "run_s": 14.048000671497423,
+   "peak_gb": 32.776121856,
+   "extrapolated": true,
+   "speedup_vs_toolbox": 812.2081844948736
+  },
+  {
+   "key": "proto",
+   "label": "Triton prototype",
+   "impl": "triton_proto",
+   "run": "26-11-21_15-10-58_sim_v2",
+   "status": "ok",
+   "sims_per_s": 1499.6442452829672,
+   "setup_s": 0.18852727399999836,
+   "run_s": 0.4943013390000015,
+   "peak_gb": 9.40695808,
+   "extrapolated": false,
+   "speedup_vs_toolbox": 16819.13960375954
+  },
+  {
+   "key": "v2",
+   "label": "Kernel v2",
+   "impl": "src.kernel:TritonGNM",
+   "run": "26-11-21_15-10-58_sim_v2",
+   "status": "ok",
+   "sims_per_s": 1854.309193823957,
+   "setup_s": 0.1560691460000001,
+   "run_s": 0.3961580680000054,
+   "peak_gb": 3.175516672,
+   "extrapolated": false,
+   "speedup_vs_toolbox": 20796.855852685992
+  },
+  {
+   "key": "v2bi",
+   "label": "v2 + batched init",
+   "impl": "src.kernel:TritonGNM",
+   "run": "26-11-21_15-42-39_sim_v2_bigB",
+   "status": "ok",
+   "sims_per_s": 2217.159169891459,
+   "setup_s": 0.06628551699999718,
+   "run_s": 0.3955667550000008,
+   "peak_gb": 5.65690112,
+   "extrapolated": false,
+   "speedup_vs_toolbox": 24866.370620535876
+  }
+ ],
+ "scaling": [
+  {
+   "key": "toolbox",
+   "label": "Toolbox (reference)",
+   "points": [
+    {
+     "n": 68,
+     "status": "ok",
+     "sims_per_s": 335.8327171137943,
+     "setup_s": 0.0034677729999970097,
+     "run_s": 3.045669335499845,
+     "peak_gb": 0.26559744,
+     "extrapolated": true
+    },
+    {
+     "n": 219,
+     "status": "ok",
+     "sims_per_s": 7.337102600186025,
+     "setup_s": 0.0068837240000050315,
+     "run_s": 139.55774495844986,
+     "peak_gb": 2.444435968,
+     "extrapolated": true
+    },
+    {
+     "n": 1000,
+     "status": "ok",
+     "sims_per_s": 0.08916295842789457,
+     "setup_s": 0.10759301500000618,
+     "run_s": 11484.482174473495,
+     "peak_gb": 50.216019456,
+     "extrapolated": true
+    },
+    {
+     "n": 2000,
+     "status": "oom"
+    }
+   ]
+  },
+  {
+   "key": "dense",
+   "label": "Dense baseline",
+   "points": [
+    {
+     "n": 68,
+     "status": "ok",
+     "sims_per_s": 3916.12006595448,
+     "setup_s": 0.0014823600000042347,
+     "run_s": 0.2600009404999817,
+     "peak_gb": 0.16615168,
+     "extrapolated": true
+    },
+    {
+     "n": 219,
+     "status": "ok",
+     "sims_per_s": 100.61425777944977,
+     "setup_s": 0.0029321980000034387,
+     "run_s": 10.174551814699731,
+     "peak_gb": 1.410805248,
+     "extrapolated": true
+    },
+    {
+     "n": 1000,
+     "status": "ok",
+     "sims_per_s": 0.9361571769254332,
+     "setup_s": 0.008993081999996377,
+     "run_s": 1093.8244199812464,
+     "peak_gb": 28.70656768,
+     "extrapolated": true
+    },
+    {
+     "n": 2000,
+     "status": "oom"
+    }
+   ]
+  },
+  {
+   "key": "v2bi",
+   "label": "v2 + batched init",
+   "points": [
+    {
+     "n": 68,
+     "status": "ok",
+     "sims_per_s": 236742.69790960252,
+     "setup_s": 0.001799437999999931,
+     "run_s": 0.0025259330000002578,
+     "peak_gb": 0.072305152,
+     "extrapolated": false
+    },
+    {
+     "n": 219,
+     "status": "ok",
+     "sims_per_s": 41165.31116613357,
+     "setup_s": 0.005191992000000312,
+     "run_s": 0.019683321000000475,
+     "peak_gb": 0.742414848,
+     "extrapolated": false
+    },
+    {
+     "n": 1000,
+     "status": "ok",
+     "sims_per_s": 2217.159169891459,
+     "setup_s": 0.06628551699999718,
+     "run_s": 0.3955667550000008,
+     "peak_gb": 5.65690112,
+     "extrapolated": false
+    },
+    {
+     "n": 2000,
+     "status": "ok",
+     "sims_per_s": 316.3822861140788,
+     "setup_s": 0.25335711600000366,
+     "run_s": 2.9832336949999956,
+     "peak_gb": 14.87120128,
+     "extrapolated": false
+    }
+   ]
+  }
+ ],
+ "speedup_n": [
+  {
+   "n": 68,
+   "speedup": 704.9423294556025
+  },
+  {
+   "n": 219,
+   "speedup": 5610.5677416981825
+  },
+  {
+   "n": 1000,
+   "speedup": 24866.370620535876
+  },
+  {
+   "n": 2000,
+   "speedup": null,
+   "toolbox": "oom"
+  }
+ ],
+ "bigB": [
+  {
+   "n": 68,
+   "points": [
+    {
+     "B": 1024,
+     "status": "ok",
+     "sims_per_s": 236742.69790960252,
+     "setup_s": 0.001799437999999931,
+     "run_s": 0.0025259330000002578,
+     "peak_gb": 0.072305152,
+     "extrapolated": false
+    },
+    {
+     "B": 2048,
+     "status": "ok",
+     "sims_per_s": 243242.27702801637,
+     "setup_s": 0.0038031890000000956,
+     "run_s": 0.004616399999999743,
+     "peak_gb": 0.146360832,
+     "extrapolated": false
+    },
+    {
+     "B": 4096,
+     "status": "ok",
+     "sims_per_s": 390277.03285407176,
+     "setup_s": 0.0023503580000001634,
+     "run_s": 0.008144750999999673,
+     "peak_gb": 0.289163776,
+     "extrapolated": false
+    },
+    {
+     "B": 8192,
+     "status": "ok",
+     "sims_per_s": 399831.2821318248,
+     "setup_s": 0.004971193000000262,
+     "run_s": 0.01551744899999985,
+     "peak_gb": 0.58007808,
+     "extrapolated": false
+    },
+    {
+     "B": 16384,
+     "status": "ok",
+     "sims_per_s": 445258.40831535665,
+     "setup_s": 0.006944724999998542,
+     "run_s": 0.029851884999999356,
+     "peak_gb": 1.158564352,
+     "extrapolated": false
+    }
+   ]
+  },
+  {
+   "n": 219,
+   "points": [
+    {
+     "B": 1024,
+     "status": "ok",
+     "sims_per_s": 41165.31116613357,
+     "setup_s": 0.005191992000000312,
+     "run_s": 0.019683321000000475,
+     "peak_gb": 0.742414848,
+     "extrapolated": false
+    },
+    {
+     "B": 2048,
+     "status": "ok",
+     "sims_per_s": 43018.043422598006,
+     "setup_s": 0.008710589000001434,
+     "run_s": 0.03889734099999842,
+     "peak_gb": 1.483308544,
+     "extrapolated": false
+    },
+    {
+     "B": 4096,
+     "status": "ok",
+     "sims_per_s": 43904.00736078136,
+     "setup_s": 0.016452852000000462,
+     "run_s": 0.07684159299999926,
+     "peak_gb": 2.964418048,
+     "extrapolated": false
+    },
+    {
+     "B": 8192,
+     "status": "ok",
+     "sims_per_s": 45974.77566321438,
+     "setup_s": 0.02764811399999978,
+     "run_s": 0.15053655100000007,
+     "peak_gb": 3.782973952,
+     "extrapolated": false
+    },
+    {
+     "B": 16384,
+     "status": "ok",
+     "sims_per_s": 47549.77316183949,
+     "setup_s": 0.05050645399999887,
+     "run_s": 0.29405880700000075,
+     "peak_gb": 4.980324864,
+     "extrapolated": false
+    }
+   ]
+  },
+  {
+   "n": 1000,
+   "points": [
+    {
+     "B": 1024,
+     "status": "ok",
+     "sims_per_s": 2217.159169891459,
+     "setup_s": 0.06628551699999718,
+     "run_s": 0.3955667550000008,
+     "peak_gb": 5.65690112,
+     "extrapolated": false
+    },
+    {
+     "B": 2048,
+     "status": "ok",
+     "sims_per_s": 2248.2775586645166,
+     "setup_s": 0.12739710900000034,
+     "run_s": 0.7835224489999995,
+     "peak_gb": 8.739542528,
+     "extrapolated": false
+    },
+    {
+     "B": 4096,
+     "status": "ok",
+     "sims_per_s": 2286.7076700633183,
+     "setup_s": 0.24452364099999713,
+     "run_s": 1.5466978839999967,
+     "peak_gb": 14.903514624,
+     "extrapolated": false
+    },
+    {
+     "B": 8192,
+     "status": "ok",
+     "sims_per_s": 2322.7748815765112,
+     "setup_s": 0.4907993449999992,
+     "run_s": 3.0360168200000004,
+     "peak_gb": 27.2333568,
+     "extrapolated": false
+    },
+    {
+     "B": 16384,
+     "status": "ok",
+     "sims_per_s": 2303.8433317419126,
+     "setup_s": 1.0580497559999955,
+     "run_s": 6.053544932000001,
+     "peak_gb": 51.89259008,
+     "extrapolated": false
+    }
+   ]
+  },
+  {
+   "n": 2000,
+   "points": [
+    {
+     "B": 1024,
+     "status": "ok",
+     "sims_per_s": 316.3822861140788,
+     "setup_s": 0.25335711600000366,
+     "run_s": 2.9832336949999956,
+     "peak_gb": 14.87120128,
+     "extrapolated": false
+    },
+    {
+     "B": 2048,
+     "status": "ok",
+     "sims_per_s": 317.5164312249296,
+     "setup_s": 0.4951671450000106,
+     "run_s": 5.95489275300001,
+     "peak_gb": 27.18103296,
+     "extrapolated": false
+    },
+    {
+     "B": 4096,
+     "status": "ok",
+     "sims_per_s": 315.13413204243255,
+     "setup_s": 1.1415642719999965,
+     "run_s": 11.856075727999993,
+     "peak_gb": 51.797616128,
+     "extrapolated": false
+    },
+    {
+     "B": 8192,
+     "status": "oom"
+    },
+    {
+     "B": 16384,
+     "status": "oom"
+    }
+   ]
+  }
+ ],
+ "best": {
+  "n": 68,
+  "B": 16384,
+  "status": "ok",
+  "sims_per_s": 445258.40831535665,
+  "setup_s": 0.006944724999998542,
+  "run_s": 0.029851884999999356,
+  "peak_gb": 1.158564352,
+  "extrapolated": false
+ },
+ "mem_n": 2000,
+ "mem_B": 1024,
+ "memory": [
+  {
+   "key": "toolbox",
+   "label": "Toolbox (reference)",
+   "status": "oom"
+  },
+  {
+   "key": "dense",
+   "label": "Dense baseline",
+   "status": "oom"
+  },
+  {
+   "key": "rowsampled",
+   "label": "Row-sampled PyTorch",
+   "status": "oom"
+  },
+  {
+   "key": "proto",
+   "label": "Triton prototype",
+   "status": "ok",
+   "sims_per_s": 172.2138188820604,
+   "setup_s": 0.3392515309999986,
+   "run_s": 5.606845052000001,
+   "peak_gb": 37.612699648,
+   "extrapolated": false
+  },
+  {
+   "key": "v2",
+   "label": "Kernel v2",
+   "status": "ok",
+   "sims_per_s": 310.9241062931998,
+   "setup_s": 0.3183528960000004,
+   "run_s": 2.975055300000001,
+   "peak_gb": 12.680175616,
+   "extrapolated": false
+  },
+  {
+   "key": "v2bi",
+   "label": "v2 + batched init",
+   "status": "ok",
+   "sims_per_s": 316.3822861140788,
+   "setup_s": 0.25335711600000366,
+   "run_s": 2.9832336949999956,
+   "peak_gb": 14.87120128,
+   "extrapolated": false
+  }
+ ],
+ "state_gb": {
+  "proto_9B": 36.864,
+  "v2_3B": 12.288
+ },
+ "headline": {
+  "n": 1000,
+  "B": 1024,
+  "T": 10785,
+  "v2bi": 2217.159169891459,
+  "toolbox": 0.08916295842789457,
+  "dense": 0.9361571769254332,
+  "vs_toolbox": 24866.370620535876,
+  "vs_dense": 2368.3620919012196
+ },
+ "sources": {
+  "baseline": "26-11-21_14-40-12_sim_baseline",
+  "v2": "26-11-21_15-10-58_sim_v2",
+  "bigB": "26-11-21_15-42-39_sim_v2_bigB"
+ }
+}
