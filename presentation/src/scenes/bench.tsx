@@ -102,7 +102,7 @@ export default makeScene2D(function* (view) {
 
   // ======================================================== beat B: implementations at n = 1000
   beat('B_impls');
-  yield* gA().opacity(0, 0.5);
+  // Remove the setup slide instantly so this beat's file starts on a clean frame (talk slide 4).
   gA().remove();
 
   const gB = createRef<Node>();

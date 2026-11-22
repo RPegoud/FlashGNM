@@ -15,7 +15,7 @@ the landscape in the fitting beat (row 9) are schematic and labelled as such.
 | 1 | 1 Connectomes | `talkA_connectome/01_B_regions.mp4` | "MRI divides the brain into regions, here 1,000 of them." | 10 |
 | 2 | | `talkA_connectome/02_C_fibres.mp4` | "Diffusion MRI traces the fibres between them. We represent the brain as regions joined by white-matter fibres, and ask whether a simple growth rule can recreate this wiring." | 14 |
 | 3 | | `talkA_connectome/03_D_matrix.mp4` | "As data, it's a 1,000 by 1,000 matrix." | 7 |
-| 4 | | `talkA_connectome/04_E_why.mp4` | "Generative models ask which simple rules grow brain-like wiring. Wiring differs between people, and fitted parameters have been linked to age, cognition and schizophrenia. But first we need to fit the model." | 16 |
+| 4 | | `talkA_connectome/04_E_why.mp4` | "Wiring differs between people and can help predict cognition and schizophrenia; connectomes suit established graph-modelling techniques; researchers test wiring rules by simulating connectome growth. But first we need to fit the model." | 16 |
 | 5 | 2 Model & fit | `talkM_model/01_A_grow.mp4` | "A model network starts with no connections and adds one at a time." | 10 |
 | 6 | | `talkM_model/02_B_rule.mp4` | "Each missing connection gets a probability: distance to the power η times matching index to the power γ. The two parameters trade off short connections against connections between regions with similar neighbours." | 20 |
 | 7 | | `talkM_model/03_C_toT.mp4` | "Sample one, add it, repeat until the network has as many connections as the person's. Every run is a different random network." | 10 |

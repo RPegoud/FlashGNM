@@ -97,9 +97,9 @@ export default makeScene2D(function* (view) {
   // Third item: Liu et al. 2023 (intro) link parameter variation to ageing (Betzel 2016),
   // cognitive performance (Akarca 2021) and schizophrenia (Zhang 2021).
   const items = [
-    'Generative models ask which simple rules can grow brain-like wiring',
-    'Wiring differs between people, through development and in disorders',
-    'Fitted parameters have been associated with age, cognition and schizophrenia',
+    'Wiring differs between people and can help predict cognition and schizophrenia',
+    'Are conducive to study using established graphical modelling techniques',
+    'Researchers test different wiring rules in simulations of connectome growth'
   ];
   const WX = 40;
   view.add(
