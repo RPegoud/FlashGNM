@@ -1,0 +1,124 @@
+# Presentation draft: 5 min (3 min intro + kernel, 2 min science)
+
+Data: Griffa et al., 70 subjects, Lausanne 68 to 1000 regions, deterministic tractography,
+Euclidean template distances. Every number below is in `results/` (sources in brackets).
+
+## 1. Claims, graded
+
+**A: say it plainly.** Large effects, paired over 70 subjects, simple metrics, validated
+runs.
+
+| # | Claim | Numbers | Caveat to say if asked |
+|---|---|---|---|
+| A1 | The kernel is orders of magnitude faster than the toolbox on the same GPU | n = 1000, B = 1024: 2,217 vs ~0.1 sims/s (~20,000x); n = 68: 237k vs 336 sims/s (~700x) | Toolbox times are extrapolated from timed probe steps; same H100 [`26-11-21_*_sim_*`] |
+| A2 | Every result run is validated, and the kernel matches the reference implementations | Full-run checks on every batch; 61 GPU tests for the rule kernel; reference = literal port of Oldham's MATLAB to 1e-9 | Our port of their formula, not their code run |
+| A3 | Fitted models match the *distributions*, not the *wiring*: recall equals chance in every distance bin | Classic rule, n = 68 to 1000; all three rule forms at n = 68, 219; leave-one-out group consensus is 3x to 125x above chance at > 60 mm [`recovery/`, `rules/recovery/`] | "Chance" = the model's own edge density in that bin. Euclidean distances. |
+| A4 | Fitting with one simulation per point is misleading | Oldham-style search: reports energies 0.02 to 0.13 lower than fresh networks at its optimum deliver; its optima are worse than a replicated grid's for 51 to 64/70 subjects, every rule and scale, p < 1e-6 [`rules/voronoi_vs_grid.md`] | Our port of their search, on our data |
+
+**B: say it with the qualifier attached.**
+
+| # | Claim (with qualifier) | Numbers |
+|---|---|---|
+| B1 | At 68 regions, synthetic subjects with *identical* parameters reproduce the cross-subject eta-gamma correlation and spread | Correlation +0.90 (null) vs +0.79 (real); gamma SD 0.71 vs 0.38. Real spread exceeds the null only at 1000 regions (0.13 vs 0.07, p 8e-7) [`analysis_null/compare.md`]. Qualifiers: one null parameter set per scale; toolbox conventions; our correlation is *positive*, Akarca's negative, so this is about the method, not a replication of their result. |
+| B2 | The fit gets worse relative to real between-subject variability as resolution rises, for every rule form tested | Classic rule: 1.5x the floor at n = 68, 4.3x at n = 1000 [`noise_floor/`]. Oldham's rules: 1.35-1.44x at n = 68, 1.64-1.97x at n = 219. Qualifier: rule forms tested only up to 219. |
+| B3 | Which rule fits best depends on resolution | Held-out energy, additive vs best multiplicative: worse at n = 68 (53/70, p 7e-7), better at n = 219 (62/70, p 7e-11) [`rules/README.md`]. Qualifier: two resolutions only. |
+| B4 | Coarse grids miss the multiplicative rules' optimum | The ridge in gamma is ~0.1 wide; zooming improved the best energy by 0.05-0.09. |
+
+**C: don't claim (or only as an aside).**
+
+- "Akarca's individual differences are noise". We didn't use their data, conventions or
+  sign. Say B1 instead.
+- "The additive rule fits best". Only at n = 219, and its n = 68 lead was selection bias.
+- "Oldham's long-range result holds at 1000 regions for *their* rule". Only the classic
+  rule was run at 1000; their rule up to 219.
+- The toolbox-vs-Oldham convention difference "is caused by the offset". The optimum
+  moves, but the mechanism is unverified.
+- Anything from the Cochran Q test: retracted (miscalibrated, see the null).
+
+## 2. Structure and script
+
+**0:00-3:00 Intro and kernel: the existing clips** (`presentation-anims/presentation/output`)
+
+| Time | Clip | Line |
+|---|---|---|
+| 0:00 | clip1_wiring | "Brains wire by cost and by similarity. GNMs grow a network edge by edge to test which rules reproduce real connectomes." |
+| 0:30 | clip2_naive | "Each step samples one edge from n^2 probabilities: fitting needs millions of networks, so studies use one run per parameter." |
+| 1:00 | clip3_chain, clip4_matrices | "Only rows i and j change per step: keep row sums, sample a row, then a column. O(n) per step." |
+| 1:45 | clip5_kernel | "One fused GPU kernel per simulation, state cut from 9 to 3 bytes per pair, thousands of simulations in parallel." |
+| 2:30 | clip6_bench | "~20,000x the toolbox at 1000 regions [A1]. Everything validated [A2]. So we can replicate every fit." |
+
+**3:00-5:00 Science: two results and one line**
+
+| Time | Beat | Animation | Line |
+|---|---|---|---|
+| 3:00 | **One run per point fools you [A4, B1]** | S1, then S2 | "We grew 70 synthetic subjects with *identical* parameters. Fitted the usual way, they show the same eta-gamma correlation as real subjects. And Oldham's single-run search reports a fit it can't reproduce: on fresh networks, its optimum is worse than a replicated grid's for most subjects." |
+| 4:05 | **Distributions, not wiring [A3]** | S3 | "At the best fit, every model, classic or additive, at every resolution, places edges no better than chance in each distance bin. Other people's brains predict the long-range edges far better. The models match statistics, not wiring." |
+| 4:45 | Close [B2, B3] | static | "And the gap to real variability grows with resolution. Questions we can now afford to ask: dense tractography, per-subject uncertainty." |
+
+## 3. Animations for the science part (3 picks, same style as clips 1-6)
+
+All numbers should come from an export script reading `results/`, as in `bench.tsx`.
+
+**S1: "Synthetic twins" (~20 s, B1)**
+- **Beat A:** 70 dots, the real subjects' optima at n = 68, in (eta, gamma).
+  - Correlation counter +0.79.
+  - Thin bootstrap ellipses show each subject's own uncertainty: they are elongated along
+    the same diagonal.
+- **Beat B:** a star at the true parameters (-1.8, 2.3).
+  - 70 dots burst from the star and settle where the fits land: same spread along the
+    valley, correlation counter +0.90.
+- **Beat C (optional):** the same at n = 1000: real dots spread wider than the null's
+  (SD 0.13 vs 0.07). "Here, individuals do differ."
+- **Data:**
+  - `results/analysis_individual/per_subject.npz` and `results/analysis_null/per_subject.npz`
+    (keys `033_eta`, `033_gamma`, `033_boot_eta`, `033_boot_gamma`; `500_*`);
+  - `NULL_PARAMS` in `src/landscape.py`.
+
+**S2: "Luckiest of 10,000" (~25 s, A4)**
+- **Subject:** subject 42, n = 219, additive rule (typical: median gap and median
+  optimism).
+- **Beat A:** five waves of 2,000 points fill the (eta, gamma) plane, coloured by level,
+  concentrating near the valley.
+- **Beat B:** the best single point pulses, labelled "reported 0.119".
+- **Beat C:** 100 fresh networks at that point drop as a band: mean 0.205. Next to it, the
+  replicated grid's optimum: 0.185.
+  - Caption: "search worse for 56/70 subjects; reported fits optimistic by 0.086 (median)".
+- **Data:**
+  - `results/rules/vor_add_exp/scale125/sub42.json` (`params`, `ks`, `level`; also on the
+    Modal volume `vor_add_exp`);
+  - held-out values in `results/rules/recovery_vor/scale125.jsonl` and
+    `results/rules/recovery/scale125.jsonl`.
+  - Only the mean and SD of held-out energies are stored. Draw mean ± SD, or regenerate the
+    100 per-network energies (seconds on GPU) if a histogram is wanted.
+
+**S3: "Recall = chance" (~25 s, A3)**
+- **Beat A:** distance bins on x (0-20 ... >120 mm). Grey bars show chance; model recall
+  bars grow and stop exactly at the grey tops.
+- **Beat B:** cycle with a short crossfade: classic rule n = 68 -> 219 -> 1000, then
+  additive and multiplicative at n = 219. The model bars track the grey every time.
+- **Beat C:** group-consensus bars shoot far above chance, most strikingly at long range.
+  - Caption: "> 60 mm: top-25% predicted edges exist 0.8% vs 0.7% base rate (model) vs
+    2.6% (other brains), n = 1000".
+- **Data:**
+  - `results/recovery/summary.json` (`recall_per_bin`, `chance_per_bin` per model and
+    scale);
+  - `results/rules/recovery/scale{033,125}.jsonl` (per subject: take medians).
+
+**Optional, if time:** a "replicated landscape" bridge (~10 s): 20 single-run landscapes
+flicker, then settle into their mean with the near-optimal set outlined. It sets up S1 and
+S2. Data: per-subject `.npz` on the volume `flashgnm-landscapes/griffa_full`.
+
+## 4. Likely questions
+
+- **"Is chance the right baseline?"** It is the model's own density per distance bin, so it
+  asks whether the model knows *which* pairs at a given distance connect. A pure
+  distance-only model is also at chance; group consensus is far above it.
+- **"Your conventions differ from Akarca / the toolbox."** Yes. Toolbox conventions for the
+  classic rule; Oldham's verified conventions for H9. The same rule under the two
+  conventions moves the optimum from (-1.8, 2.3) to (-4.0, 0.40).
+- **"Does the null depend on where you put it?"** One parameter set per scale (the cohort
+  median), so we can't yet say. A second null point at n = 68 costs about $1.
+- **"Why not their data?"** HCP Schaefer-400 isn't in the repo. MICA-MICs is packaged and
+  would be next.
+- **"Speedup vs MATLAB?"** We compared against the PyTorch toolbox, not their MATLAB; don't
+  quote a MATLAB number.
