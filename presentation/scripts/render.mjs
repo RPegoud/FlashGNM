@@ -159,7 +159,7 @@ for (let k = 0; k < list.length - 1; k++) {
 
 // ------------------------------------------------------------------ contact sheet
 execFileSync(ffmpeg, [
-  '-y', '-loglevel', 'error', '-i', out, '-vf', 'fps=1,scale=480:-1,tile=5x8', '-frames:v', '1',
+  '-y', '-loglevel', 'error', '-i', out, '-vf', 'fps=1,scale=480:-1,tile=6x10', '-frames:v', '1',
   `output/${project}_sheet.png`,
 ]);
 console.log(`  wrote output/${project}_sheet.png`);
