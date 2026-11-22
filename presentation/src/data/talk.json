@@ -1,0 +1,22 @@
+{
+ "landscape": {
+  "source": [
+   "results/landscape_griffa_full/{meta.json,summary.csv}",
+   "results/26-11-21_14-40-12_sim_baseline/results.jsonl (toolbox, n=1000, B=1024)"
+  ],
+  "n": 1000,
+  "grid": [
+   51,
+   51
+  ],
+  "repeats": 20,
+  "sims_per_subject": 52020,
+  "subjects": 70,
+  "toolbox_sims_per_s": 0.08916295842789457,
+  "toolbox_extrapolated": true,
+  "toolbox_s_per_subject": 583426.1325241714,
+  "ours_s_per_subject_median": 75.80086992550001,
+  "ours_s_cohort_total": 5482.872403214001,
+  "toolbox_s_cohort_total": 40839829.276691996
+ }
+}
