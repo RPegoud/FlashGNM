@@ -13,6 +13,7 @@ export default defineConfig({
         './src/clip4_matrices.ts',
         './src/clip5_kernel.ts',
         './src/clip6_bench.ts',
+        './src/clip7_twins.ts',
       ],
     }),
     ffmpeg(),
