@@ -29,7 +29,7 @@ const CW = 760, CH = 300;
 
 export default makeScene2D(function* (view) {
   view.fill(C.bg);
-  const title = header(view, '4', 'Re-testing published findings');
+  const title = header(view, '5', 'Re-testing published findings');
   const cap = caption(view);
 
   // ---------------------------------------------------------------- cards
@@ -50,7 +50,7 @@ export default makeScene2D(function* (view) {
   beat('A_intro');
   yield* title().opacity(1, 0.6);
   yield* all(sequence(0.25, ...cards.map(c => c().opacity(1, 0.6))),
-    cap.set('We re-ran three published analyses with every fit replicated 20×, on 70 people'));
+    cap.set('Three published analyses, re-run on 70 people with 20 simulations per grid point'));
   yield* waitFor(2.0);
 
   // ---------------------------------------------------------------- shared right panel
@@ -58,8 +58,8 @@ export default makeScene2D(function* (view) {
     const g = createRef<Node>();
     view.add(
       <Node ref={g} opacity={0}>
-        <Txt text={they} fontFamily={FONT} fontSize={28} fill={C.muted} x={RX0} y={-330} offset={[-1, -1]} width={RX1 - RX0} textWrap />
-        <Txt text={ours} fontFamily={FONT} fontSize={36} fill={C.mint} x={RX0} y={-230} offset={[-1, -1]} width={RX1 - RX0} textWrap lineHeight={50} />
+        <Txt text={they} fontFamily={FONT} fontSize={36} fontWeight={600} fill={C.mint} x={RX0} y={-340} offset={[-1, -1]} width={RX1 - RX0} textWrap lineHeight={48} />
+        <Txt text={ours} fontFamily={FONT} fontSize={30} fill={C.muted} x={RX0} y={-220} offset={[-1, -1]} width={RX1 - RX0} textWrap lineHeight={42} />
       </Node>,
     );
     return g;
@@ -74,8 +74,8 @@ export default makeScene2D(function* (view) {
   beat('B_akarca');
   const d = s1['033'];
   const p1 = panel(
-    'They fitted wiring parameters to each person to study individual differences.',
-    `70 synthetic “twins” grown with one shared parameter set show the same spread and correlation as 70 real people (${d.n} regions).`,
+    'Can the parameter correlation appear without individual differences?',
+    '70 synthetic “twins”, generated from one shared parameter pair, fitted like real people',
   );
   // mini scatter
   const E0 = -2.1, E1 = -1.4, G0 = 1.0, G1 = 4.3;
@@ -120,14 +120,14 @@ export default makeScene2D(function* (view) {
       <Txt text="corr(η, γ)" fontFamily={FONT} fontSize={24} fill={C.muted} x={LX - 10} y={CY - 140} offset={[-1, 0]} />
     </Node>,
   );
-  yield* all(focus(0), cap.set('Akarca et al.: individual wiring parameters'));
+  yield* all(focus(0), cap.set('Akarca et al. 2021: a null test'));
   yield* p1().opacity(1, 0.6);
   yield* all(sc().opacity(1, 0.4), sequence(0.01, ...realDots.map(c => c.scale(1, 0.3, easeOutCubic))));
   yield* sequence(0.01, ...twinDots.map((c, k) => all(c.opacity(1, 0.15), c.position(mp(d.null.eta[k], d.null.gamma[k]).add(offN[k]), 0.8, easeOutCubic))));
   yield* leg1().opacity(1, 0.5);
-  yield* cap.set(`At ${d.n} regions, the fitting method alone produces this pattern`);
+  yield* cap.set(`At ${d.n} regions, fitting noise reproduces a strong η–γ correlation`);
   yield* waitFor(1.6);
-  yield* cap.set(`Only at ${comma(s1['500'].n)} regions do real people spread more than their twins`);
+  yield* cap.set(`Only at ${comma(s1['500'].n)} regions do real people vary more than the twins`);
   yield* waitFor(2.0);
 
   // ======================================================== beat C: Oldham 2022
@@ -135,15 +135,15 @@ export default makeScene2D(function* (view) {
   yield* all(p1().opacity(0, 0.4), sc().opacity(0, 0.4), leg1().opacity(0, 0.4),
     ...realDots.map(c => c.opacity(0, 0.4)), ...twinDots.map(c => c.opacity(0, 0.4)));
   const p2 = panel(
-    `They found best fits with a search that grows one network per parameter point (${comma(s2.n_levels * s2.per_level)} points).`,
-    `Its best fit was luck: fresh networks at that point score worse than a replicated grid’s best, for ${s2.cohort.worse} of ${s2.cohort.n} people.`,
+    'A single-run search selects the luckiest simulation.',
+    `Generate ${s2.n_fresh} fresh networks there, and the apparent minimum disappears.`,
   );
-  const QX0 = RX0 + 300, QX1 = RX1 - 150, QM = 0.3;
+  const QX0 = RX0 + 430, QX1 = RX1 - 150, QM = 0.3;
   const qx = (e: number) => QX0 + (e / QM) * (QX1 - QX0);
   const bars = [
-    {lab: 'reported (1 network)', v: s2.best.reported, sd: 0, col: C.green},
-    {lab: `same point, ${s2.n_fresh} fresh`, v: s2.heldout_search.mean, sd: s2.heldout_search.sd, col: C.mint},
-    {lab: `replicated grid, ${s2.n_fresh} fresh`, v: s2.heldout_grid.mean, sd: s2.heldout_grid.sd, col: C.deep},
+    {lab: 'selected single run', v: s2.best.reported, sd: 0, col: C.green},
+    {lab: `${s2.n_fresh} fresh runs, same parameters`, v: s2.heldout_search.mean, sd: s2.heldout_search.sd, col: C.mint},
+    {lab: 'best replicated fit', v: s2.heldout_grid.mean, sd: s2.heldout_grid.sd, col: C.deep},
   ];
   const ch2 = createRef<Node>();
   view.add(
@@ -171,14 +171,14 @@ export default makeScene2D(function* (view) {
     view.add(g);
     return {g, bar: bar(), w: qx(b.v) - QX0};
   });
-  yield* all(cards[0]().opacity(0, 0.4), focus(1), cap.set('Oldham et al.: fitting with a single-run search'));
+  yield* all(cards[0]().opacity(0, 0.4), focus(1), cap.set('Oldham et al. 2022: the winner’s curse'));
   yield* p2().opacity(1, 0.6);
   yield* ch2().opacity(1, 0.4);
   for (const b of barNodes) {
     yield* b.g.opacity(1, 0.2);
     yield* b.bar.width(b.w, 0.6, easeOutCubic);
   }
-  yield* cap.set(`Reported fits were optimistic by ${s2.cohort.median_optimism.toFixed(3)} (median over ${s2.cohort.n} people)`);
+  yield* cap.set(`For ${s2.cohort.worse}/${s2.cohort.n} people, the replicated grid finds a better expected fit`);
   yield* waitFor(2.0);
 
   // ======================================================== beat D: Oldham 2025
@@ -186,8 +186,8 @@ export default makeScene2D(function* (view) {
   yield* all(p2().opacity(0, 0.4), ch2().opacity(0, 0.4), ...barNodes.map(b => b.g.opacity(0, 0.4)));
   const m = s3.classic[2], g = s3.consensus[2];
   const p3 = panel(
-    'They showed that the models miss long-range connections.',
-    `At ${comma(m.n)} regions, the best-fitting model places connections no better than chance at any distance; other people’s brains do up to ${Math.round(Math.max(...g.recall.map((r, k) => r / g.chance[k])))}× better.`,
+    'Their main analysis used 200 left-hemisphere regions, partly to reduce compute.',
+    `We extended the test to ${comma(m.n)} regions, whole brain.`,
   );
   const NB = s3.bins_mm.length - 1;
   const BX0 = RX0 + 80, BX1 = RX1 - 40;
@@ -231,12 +231,12 @@ export default makeScene2D(function* (view) {
       <Txt text="other people’s brains" fontFamily={FONT} fontSize={24} fill={C.mint} x={BX0 + 310} y={CY - 150} offset={[-1, 0]} />
     </Node>,
   );
-  yield* all(cards[1]().opacity(0, 0.4), focus(2), cap.set('Oldham, Fornito & Ball: long-range connections'));
+  yield* all(cards[1]().opacity(0, 0.4), focus(2), cap.set('Oldham, Fornito & Ball 2025: long-range connections'));
   yield* p3().opacity(1, 0.6);
   yield* all(ch3().opacity(1, 0.4), leg3().opacity(1, 0.4), sequence(0.05, ...md.map(c => c.opacity(1, 0.3))));
   yield* waitFor(0.6);
   yield* sequence(0.08, ...gb.map((b, k) => b.height(ly(1) - ly(g.recall[k] / g.chance[k]), 0.6, easeOutCubic)));
-  yield* cap.set('The models match network statistics, not the actual wiring');
+  yield* cap.set(`At chance at every distance; other people’s brains predict the wiring up to ${Math.round(Math.max(...g.recall.map((r, k) => r / g.chance[k])))}× better`);
   yield* waitFor(2.5);
   beat('end');
 });

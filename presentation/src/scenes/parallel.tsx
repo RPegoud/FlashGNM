@@ -24,7 +24,7 @@ const PER_CELL = 0.012; // same scan speed on both sides
 
 export default makeScene2D(function* (view) {
   view.fill(C.bg);
-  const title = header(view, '2', 'Why the GPU makes it possible');
+  const title = header(view, '3', 'How we make it fast');
   const cap = caption(view);
   const rng = useRandom(11);
 
@@ -74,6 +74,7 @@ export default makeScene2D(function* (view) {
   // sub-titles and counters (changed per beat)
   const subL = createRef<Txt>(), subR = createRef<Txt>();
   const cntL = createSignal(0), cntR = createSignal(0);
+  const fL = createSignal(''), fR = createSignal(''); // explanatory endpoint replaces the toy counts
   const cnt = createRef<Node>();
   const realL = createRef<Txt>(), realR = createRef<Txt>();
   const cntLabel = createRef<Txt>();
@@ -83,8 +84,8 @@ export default makeScene2D(function* (view) {
       <Txt ref={subR} text="" fontFamily={FONT} fontSize={28} fill={C.mint} x={RX + 17} y={GY - H - 62} />
       <Node ref={cnt} opacity={0}>
         <Txt ref={cntLabel} text="entries read" fontFamily={FONT} fontSize={24} fill={C.muted} x={(LX + RX) / 2} y={GY + H + 40} />
-        <Txt text={() => comma(cntL())} fontFamily={MONO} fontSize={52} fill={C.muted} x={LX} y={GY + H + 60} />
-        <Txt text={() => comma(cntR())} fontFamily={MONO} fontSize={52} fill={C.green} x={RX + 17} y={GY + H + 60} />
+        <Txt text={() => fL() || comma(cntL())} fontFamily={MONO} fontSize={52} fill={C.muted} x={LX} y={GY + H + 60} />
+        <Txt text={() => fR() || comma(cntR())} fontFamily={MONO} fontSize={52} fill={C.green} x={RX + 17} y={GY + H + 60} />
         <Txt ref={realL} text="" fontFamily={MONO} fontSize={26} fill={C.muted} x={LX} y={GY + H + 112} />
         <Txt ref={realR} text="" fontFamily={MONO} fontSize={26} fill={C.green} x={RX + 17} y={GY + H + 112} />
       </Node>
@@ -100,7 +101,7 @@ export default makeScene2D(function* (view) {
   yield* title().opacity(1, 0.6);
   yield* all(L.g.opacity(1, 0.5), Rg.g.opacity(1, 0.5), labels().opacity(1, 0.5), subL().opacity(1, 0.5), subR().opacity(1, 0.5),
     ...rCells.map(c => c.opacity(1, 0.5)), rLab().opacity(1, 0.5),
-    cap.set('Step 1: draw the next connection in proportion to P'));
+    cap.set('Avoid scanning all n² pairs'));
   yield* cnt().opacity(1, 0.4);
 
   // draws (computed exactly as the two methods would)
@@ -149,7 +150,9 @@ export default makeScene2D(function* (view) {
   );
   cursorL().opacity(0);
   cursorR().opacity(0);
-  yield* cap.set('Same distribution, a tiny fraction of the reads');
+  fL('n² reads');
+  fR('2n reads');
+  yield* cap.set('Same distribution: about 2n reads instead of n²');
   yield* waitFor(2.0);
 
   // ======================================================== beat B: update
@@ -166,14 +169,14 @@ export default makeScene2D(function* (view) {
   Rg.cells[si][sj].lineWidth(0); Rg.cells[si][sj].scale(1);
   rCells[si].lineWidth(0);
   cntLabel().text('entries recomputed');
-  cntL(0); cntR(0);
+  cntL(0); cntR(0); fL(''); fR('');
   realL().text(`n = ${comma(P.n)}: ${comma(P.n * P.n)}`);
   realR().text(`n = ${comma(P.n)}: ~${comma(P.rows_per_step * P.n)}`);
   yield* all(subL().opacity(0, 0.3), subR().opacity(0, 0.3));
   subL().text('recompute every pair');
   subR().text('update rows & columns i, j only');
   yield* all(subL().opacity(1, 0.3), subR().opacity(1, 0.3),
-    cap.set('Step 2: add the connection and update P'));
+    cap.set('Update only what changed'));
 
   const lit = new Set<string>();
   for (let i = 0; i < N; i++) for (const j of [ai, aj]) { lit.add(`${i},${j}`); lit.add(`${j},${i}`); }
@@ -197,7 +200,9 @@ export default makeScene2D(function* (view) {
     })(),
   );
   Pm = Pn; R = Rn;
-  yield* cap.set('Only rows and columns i and j change, so the row sums are patched, not recomputed');
+  fL('n²');
+  fR('O(n)');
+  yield* cap.set('Adding (i, j) changes only rows and columns i and j: patch those and the row sums');
   yield* waitFor(2.0);
 
   // ======================================================== beat C: tricks
@@ -205,19 +210,16 @@ export default makeScene2D(function* (view) {
   yield* all(L.g.opacity(0, 0.5), Rg.g.opacity(0, 0.5), labels().opacity(0, 0.5), subL().opacity(0, 0.5), subR().opacity(0, 0.5),
     cnt().opacity(0, 0.5), rLab().opacity(0, 0.5), ...rCells.map(c => c.opacity(0, 0.5)));
   const tricks = [
-    ['One fused kernel per simulation', 'a single GPU program runs all T steps, no round trips'],
-    ['P is recomputed, never stored', 'rows rebuilt from C, A, degrees and distances when needed'],
-    ['Narrow data types', 'bool A, int16 C: 3 bytes per pair instead of 9'],
-    ['Coalesced loads', 'matrices are symmetric, so read rows (contiguous), never columns'],
-    ['Exact, drift-free sampling', 'row sums in fp64, patched by deltas each step'],
+    'One fused kernel per simulation',
+    'Probabilities recomputed, never stored',
+    'Compact state: 3 bytes per node pair',
   ];
-  const trickNodes = tricks.map(([h, s], k) => {
-    const y = -300 + k * 120;
+  const trickNodes = tricks.map((h, k) => {
+    const y = -170 + k * 150;
     const g = (
       <Node opacity={0} x={-30}>
-        <Rect x={-780} y={y} width={14} height={14} radius={3} fill={C.green} />
-        <Txt text={h} fontFamily={FONT} fontSize={36} fontWeight={600} fill={C.mint} x={-750} y={y - 20} offset={[-1, 0]} />
-        <Txt text={s} fontFamily={FONT} fontSize={28} fill={C.muted} x={-750} y={y + 24} offset={[-1, 0]} />
+        <Rect x={-620} y={y} width={18} height={18} radius={4} fill={C.green} />
+        <Txt text={h} fontFamily={FONT} fontSize={52} fontWeight={600} fill={C.mint} x={-580} y={y} offset={[-1, 0]} />
       </Node>
     ) as Node;
     view.add(g);
@@ -253,15 +255,14 @@ export default makeScene2D(function* (view) {
       <Rect x={TX} y={TY} size={BOX + 16} stroke={C.dim} lineWidth={2} radius={6} />
       <Rect x={-TX} y={TY} size={BOX + 16} stroke={C.dim} lineWidth={2} radius={6} />
       <Txt text={`${comma(P.toolbox.B)} simulations`} fontFamily={MONO} fontSize={40} fill={C.muted} x={TX} y={TY + BOX / 2 + 60} />
-      <Txt text={`${P.toolbox.peak_gb.toFixed(1)} GB · one (η, γ) for all`} fontFamily={FONT} fontSize={26} fill={C.muted} x={TX} y={TY + BOX / 2 + 106} />
+      <Txt text={`${P.toolbox.peak_gb.toFixed(1)} GB of GPU memory`} fontFamily={FONT} fontSize={26} fill={C.muted} x={TX} y={TY + BOX / 2 + 106} />
       <Txt text={`${comma(P.ours_max.B)} simulations`} fontFamily={MONO} fontSize={40} fill={C.green} x={-TX} y={TY + BOX / 2 + 60} />
-      <Txt text={`${P.ours_max.peak_gb.toFixed(1)} GB · each its own (η, γ)`} fontFamily={FONT} fontSize={26} fill={C.mint} x={-TX} y={TY + BOX / 2 + 106} />
+      <Txt text={`${P.ours_max.peak_gb.toFixed(1)} GB of GPU memory`} fontFamily={FONT} fontSize={26} fill={C.mint} x={-TX} y={TY + BOX / 2 + 106} />
     </Node>,
   );
   yield* all(mem().opacity(1, 0.5), cap.set('Small simulations fit side by side on one GPU'));
   yield* all(tl.reveal(1, 1.6, easeInOutCubic), tr.reveal(1, 3.0, easeInOutCubic));
-  yield* all(tr.sweep(1, 1.2, easeInOutCubic),
-    cap.set(`Same memory, ${Math.round(P.ours_max.B / P.toolbox.B)}× more simulations, a whole parameter sweep in one launch (n = ${comma(P.n)})`));
+  yield* cap.set(`Same GPU memory: ${Math.round(P.ours_max.B / P.toolbox.B)}× more simulations at once (n = ${comma(P.n)})`);
   yield* waitFor(2.5);
   beat('end');
 });

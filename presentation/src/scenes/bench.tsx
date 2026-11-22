@@ -35,7 +35,7 @@ const SIZE_LINE = `n = ${data.impls_n} nodes   ·   B = ${data.impls_B} simulati
 
 export default makeScene2D(function* (view) {
   view.fill(C.bg);
-  const title = header(view, '3', 'Benchmarks');
+  const title = header(view, '4', 'Benchmarks');
   const cap = caption(view);
 
   // ======================================================== beat A: what is measured
@@ -187,7 +187,7 @@ export default makeScene2D(function* (view) {
     yield* growRow(b);
     yield* waitFor(0.35);
   }
-  yield* cap.set(`From ~${sims(H.toolbox)} to ${sims(H.v2bi)} simulations per second`);
+  yield* cap.set(`~${sig3(H.vs_toolbox)}× higher simulation throughput · n = ${comma(H.n)}, B = ${comma(H.B)}, same H100`);
   yield* waitFor(2.2);
 
   // ======================================================== beat C: scaling with n

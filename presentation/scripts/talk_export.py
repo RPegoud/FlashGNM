@@ -103,12 +103,24 @@ def connectome(scale: str = "500", subject: int = 0) -> dict:
     }
 
 
+def target68(subject: int = 0) -> dict:
+    """A real 68-region connectome (axial projection) for the fitting beat."""
+    d = np.load(ROOT / "data/griffa/scale033.npz", allow_pickle=True)
+    xyz = d["xyz"].astype(float)
+    xyz -= xyz.mean(0)
+    m = d["sub"] == subject
+    return {"source": f"data/griffa/scale033.npz, subject {subject}", "n": int(d["n"]),
+            "xy": np.round(xyz[:, :2], 1).tolist(),  # x right-left, y posterior-anterior
+            "edges": np.stack([d["i"][m], d["j"][m]], 1).astype(int).tolist(), "T": int(m.sum())}
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     lc = landscape_cost()
     pa = parallel()
     me = memory()
-    (OUT / "talk.json").write_text(json.dumps({"landscape": lc, "parallel": pa, "memory": me}, indent=1))
+    (OUT / "talk.json").write_text(json.dumps({"landscape": lc, "parallel": pa, "memory": me,
+                                               "target68": target68()}, indent=1))
     for m in me["per_n"]:
         print(f"memory n={m['n']}: toolbox {m['toolbox']['mb_per_sim']:.0f} MB/sim (B={m['toolbox']['B']}, oom {m['toolbox']['oom_at']}); "
               f"ours {m['ours']['mb_per_sim']:.1f} MB/sim (B={m['ours']['B']}, oom {m['ours']['oom_at']})")

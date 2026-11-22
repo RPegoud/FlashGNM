@@ -27,36 +27,10 @@ export default makeScene2D(function* (view) {
   view.fill(C.bg);
   const cap = caption(view);
 
-  // ======================================================== beat A: opener
-  beat('A_open');
-  const open = createRef<Node>();
-  const before = createRef<Txt>();
-  const arrow = createRef<Txt>();
-  const after = createRef<Txt>();
-  view.add(
-    <Node ref={open}>
-      <Txt fontFamily={FONT} fontSize={40} fill={C.mint} y={-150} opacity={0} ref={createRef()}
-        text={`Fitting a brain model to one person at ${comma(L.n)} regions`} />
-      <Txt ref={before} fontFamily={MONO} fontSize={120} fill={C.muted} x={-275} y={0} opacity={0} text={`${days(L.toolbox_s_per_subject)} days`} />
-      <Txt ref={arrow} fontFamily={MONO} fontSize={110} fill={C.mint} x={125} y={0} opacity={0} text="→" />
-      <Txt ref={after} fontFamily={MONO} fontSize={120} fill={C.green} fontWeight={700} x={415} y={0} opacity={0} text={`${Math.round(L.ours_s_per_subject_median)} s`} />
-      <Txt fontFamily={FONT} fontSize={26} fill={C.muted} y={165} opacity={0} textAlign={'center'} lineHeight={40}
-        text={`${comma(L.sims_per_subject)} simulated networks per person: ${L.grid[0]} × ${L.grid[1]} parameter grid × ${L.repeats} repeats\nreference toolbox (extrapolated) vs our GPU kernel (measured) · one H100`} />
-    </Node>,
-  );
-  const [line1, , , , foot] = open().children() as Txt[];
-  yield* line1.opacity(1, 0.6);
-  yield* before().opacity(1, 0.6);
-  yield* waitFor(0.6);
-  yield* all(arrow().opacity(1, 0.4), arrow().x(145, 0.4, easeOutCubic));
-  yield* all(after().opacity(1, 0.5), after().scale(1.08, 0.25).to(1, 0.25));
-  yield* foot.opacity(1, 0.5);
-  yield* waitFor(2.0);
+  // (The former "6.8 days -> 76 s" opener moved to the cost section, talkC_payoff.)
 
   // ======================================================== beat B: regions
   beat('B_regions');
-  yield* open().opacity(0, 0.6);
-  open().remove();
   const title = header(view, '1', 'Brain connectomes');
 
   const brain = new Brain3D({y: 20});
@@ -120,10 +94,12 @@ export default makeScene2D(function* (view) {
   // ======================================================== beat E: why
   beat('E_why');
   const why = createRef<Node>();
+  // Third item: Liu et al. 2023 (intro) link parameter variation to ageing (Betzel 2016),
+  // cognitive performance (Akarca 2021) and schizophrenia (Zhang 2021).
   const items = [
+    'Generative models ask which simple rules can grow brain-like wiring',
     'Wiring differs between people, through development and in disorders',
-    'Generative models ask which simple rules grow a brain-like network',
-    `Fitting one person means simulating ${comma(L.sims_per_subject)} networks`,
+    'Fitted parameters have been associated with age, cognition and schizophrenia',
   ];
   const WX = 40;
   view.add(
@@ -145,7 +121,7 @@ export default makeScene2D(function* (view) {
     yield* it.opacity(1, 0.6);
     yield* waitFor(1.4);
   }
-  yield* cap.set('That is the computational bottleneck we remove');
+  yield* cap.set('But first, we need to fit the model');
   yield* waitFor(2.0);
   cancel(spin);
   beat('end');
