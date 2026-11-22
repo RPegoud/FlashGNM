@@ -1,0 +1,80 @@
+{
+  "033": {
+    "subjects": 70,
+    "rule": "add_exp",
+    "E_opt": 0.19737100103199176,
+    "E_opt_sd": 0.030946466356740976,
+    "eta_opt": -0.06,
+    "eta_iqr": [
+      -0.09,
+      -0.06
+    ],
+    "gamma_opt": 2.3,
+    "gamma_iqr": [
+      1.8499999999999999,
+      2.6
+    ],
+    "alpha_opt": 12.0,
+    "alpha_iqr": [
+      7.5,
+      18.0
+    ],
+    "near_cells": 126.5,
+    "cells": 9261,
+    "near_share": 0.013659432026778965,
+    "near_eta_width": 0.18,
+    "near_gamma_width": 2.55,
+    "near_alpha_width": 28.5,
+    "interior": 68,
+    "binding": {
+      "degree": 5,
+      "clustering": 13,
+      "betweenness": 47,
+      "edge_length": 5
+    },
+    "all_valid": true,
+    "rec_per_step": 1.021815751005286,
+    "resyncs_per_sim": 2.1454216607277834,
+    "t_gen_s": 1.7067936080000266,
+    "t_eval_s": 0.4280056034999973
+  },
+  "125": {
+    "subjects": 70,
+    "rule": "add_exp",
+    "E_opt": 0.15268560177621382,
+    "E_opt_sd": 0.022754434523483233,
+    "eta_opt": -0.12,
+    "eta_iqr": [
+      -0.16499999999999998,
+      -0.10499999999999998
+    ],
+    "gamma_opt": 1.7,
+    "gamma_iqr": [
+      1.55,
+      1.7
+    ],
+    "alpha_opt": 6.0,
+    "alpha_iqr": [
+      3.0,
+      10.125
+    ],
+    "near_cells": 54.0,
+    "cells": 9261,
+    "near_share": 0.0058309037900874635,
+    "near_eta_width": 0.20999999999999996,
+    "near_gamma_width": 1.0499999999999998,
+    "near_alpha_width": 25.5,
+    "interior": 70,
+    "binding": {
+      "degree": 15,
+      "clustering": 7,
+      "betweenness": 46,
+      "edge_length": 2
+    },
+    "all_valid": true,
+    "rec_per_step": 1.3479459243556615,
+    "resyncs_per_sim": 0.8694309469819674,
+    "t_gen_s": 18.57039474549994,
+    "t_eval_s": 5.925822530500008
+  }
+}

@@ -236,7 +236,8 @@ def recovery(scales: str = "033 125", optima: str = "results/rules/optima.json",
     opt = json.loads((ROOT / optima).read_text())  # {scale: {subject: {rule: [e, g, a]}}}
     od = ROOT / out
     od.mkdir(parents=True, exist_ok=True)
-    jobs = [(s, int(sub), o, n_sims, seed) for s in scales.split()
+    jobs = [(s, int(sub), {k: v for k, v in o.items() if not k.startswith("_")}, n_sims, seed)
+            for s in scales.split()
             for sub, o in opt.get(s, {}).items()]
     print(f"{len(jobs)} recovery jobs", flush=True)
     rows = {}

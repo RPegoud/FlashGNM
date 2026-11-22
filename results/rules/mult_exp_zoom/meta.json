@@ -1,0 +1,20 @@
+{
+  "run": "mult_exp_zoom",
+  "rule": "mult_exp",
+  "grid": {
+    "eta_lo": -0.3,
+    "eta_hi": 0.0,
+    "n_eta": 41,
+    "gamma_lo": -1.5,
+    "gamma_hi": 2.0,
+    "n_gamma": 41,
+    "alpha_lo": 1.0,
+    "alpha_hi": 1.0,
+    "n_alpha": 1,
+    "repeats": 20
+  },
+  "seed": 0,
+  "gpu": "H100",
+  "git": "eff5317cc17666a873c415b07ebd482811af212f",
+  "started": "Sun Nov 22 00:25:26 2026"
+}

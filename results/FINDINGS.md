@@ -94,3 +94,35 @@ n = 1000, recall vs chance per bin (0-20, 20-40, 40-60, 60-80, 80-100, 100-120, 
 The SPEC's extrapolation (220 / 150 / 90 sims/s) holds to within 15%. A 50 x 50 x 20 grid at 50%
 is ~11 min of generation per (resolution, density), shared across subjects. Evaluation
 not included.
+
+## H9: rule form (additive vs multiplicative), 2026-11-22 (`rules/README.md`)
+
+- Rule kernel with Oldham et al. 2025 conventions, checked against their MATLAB.
+- Wide and zoomed replicated grids on 70 subjects at n = 68 and 219.
+- Held-out energy from 100 fresh networks at every optimum; their Voronoi search on the
+  same subjects.
+
+| | n = 68 | n = 219 |
+|---|---|---|
+| held-out energy: additive / mult exp / mult power | 0.233 / 0.220 / 0.219 | **0.180** / 0.216 / 0.196 |
+| additive vs best multiplicative | worse in 53/70 (p 7e-7) | better in 62/70 (p 7e-11) |
+| any rule's recall above chance in any distance bin | no | no |
+| Voronoi search (one run per point) worse than replicated grid | 56-64/70 per rule | 51-56/70 per rule |
+
+- **Which rule fits best depends on resolution.** The additive rule's lower grid minimum at
+  n = 68 is selection bias from a flat 3-D landscape (+0.036 from grid minimum to held-out).
+  At n = 219 it fits genuinely better, through edge length.
+- **No rule form recovers which edges exist,** short or long. The additive rule fixes the
+  distribution match, not the wiring.
+- **Coarse searches miss the multiplicative rules' narrow gamma ridge** (~0.1 wide): best
+  energy dropped by 0.05-0.09 when zoomed.
+- **Oldham's single-run Voronoi search:**
+  - it reports fits 0.02-0.13 better than its optimum delivers on fresh networks;
+  - its optima are worse than the replicated grid's for most subjects in every
+    rule/scale;
+  - 2/70 outlying searches turned a cross-subject eta-gamma correlation from -0.59 into
+    +0.99.
+- **Conventions matter:**
+  - the same multiplicative power law under Oldham vs toolbox conventions: optimum (-4.0,
+    0.40) vs (-1.8, 2.3), held-out 0.219 vs ~0.23 at n = 68;
+  - at n = 219, 0.196 vs 0.268 (grid minimum).

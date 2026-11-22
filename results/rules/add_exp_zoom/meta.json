@@ -1,0 +1,20 @@
+{
+  "run": "add_exp_zoom",
+  "rule": "add_exp",
+  "grid": {
+    "eta_lo": -0.3,
+    "eta_hi": 0.0,
+    "n_eta": 21,
+    "gamma_lo": 0.5,
+    "gamma_hi": 3.5,
+    "n_gamma": 21,
+    "alpha_lo": 0.0,
+    "alpha_hi": 30.0,
+    "n_alpha": 21,
+    "repeats": 10
+  },
+  "seed": 0,
+  "gpu": "H100",
+  "git": "eff5317cc17666a873c415b07ebd482811af212f",
+  "started": "Sun Nov 22 00:20:20 2026"
+}
