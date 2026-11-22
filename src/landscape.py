@@ -125,16 +125,18 @@ def encode_ks(ks: torch.Tensor, den: np.ndarray) -> np.ndarray:
 
 
 @torch.no_grad()
-def null_target(scale: str, subject: int, device: torch.device, seed: int = 0) -> torch.Tensor:
-    """Synthetic subject: one model network at NULL_PARAMS[scale] with T = the real
-    subject's edge count, so the null keeps the cohort's spread of T. [n, n] bool on CPU."""
+def null_target(scale: str, subject: int, device: torch.device, seed: int = 0,
+                params: tuple[float, float] | None = None) -> torch.Tensor:
+    """Synthetic subject: one model network at `params` (default NULL_PARAMS[scale]) with
+    T = the real subject's edge count, so the null keeps the cohort's spread of T.
+    [n, n] bool on CPU."""
     from src.kernel import TritonGNM
 
     D, target_fn, _ = load_griffa(scale)
     T = int(target_fn(subject).sum()) // 2
     D1 = D.to(device)
     D1.fill_diagonal_(1.0)
-    eta, gamma = NULL_PARAMS[scale]
+    eta, gamma = NULL_PARAMS[scale] if params is None else params
     torch.manual_seed(seed * 1_000_003 + subject * 1009 + 7_777_777)  # disjoint from fits
     sim = TritonGNM(D1, torch.tensor([eta], device=device), torch.tensor([gamma], device=device))
     sim.run(T)

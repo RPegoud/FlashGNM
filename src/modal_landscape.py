@@ -57,7 +57,7 @@ out_vol = modal.Volume.from_name("flashgnm-landscapes", create_if_missing=True)
 @app.function(gpu="H100!", volumes={TRITON_CACHE: triton_vol, VOL_DIR: out_vol},
               timeout=2 * 3600, max_containers=24, retries=1)
 def subject_remote(run: str, scale: str, subject: int, grid: dict, seed: int,
-                   null: bool = False) -> bytes:
+                   null: bool = False, null_params: tuple | None = None) -> bytes:
     import os
 
     import numpy as np
@@ -66,12 +66,12 @@ def subject_remote(run: str, scale: str, subject: int, grid: dict, seed: int,
     from src import landscape as ls
 
     dev = torch.device("cuda")
-    target = ls.null_target(scale, subject, dev, seed) if null else None
+    target = ls.null_target(scale, subject, dev, seed, null_params) if null else None
     res = ls.run_subject(scale, subject, ls.Grid(**grid), dev, seed=seed,
                          log=lambda *a: None, target=target)
     meta = json.loads(res["meta"])
     if null:
-        meta["target"] = {"null": True, "params": ls.NULL_PARAMS[scale]}
+        meta["target"] = {"null": True, "params": list(null_params or ls.NULL_PARAMS[scale])}
         res["target_A"] = np.packbits(target.numpy())
     meta["git"] = os.environ.get("GIT_SHA", "")
     res["meta"] = json.dumps(meta)
@@ -91,7 +91,7 @@ def subject_remote(run: str, scale: str, subject: int, grid: dict, seed: int,
 def main(scales: str = "033 060 125 250 500", subjects: str = "all", run: str = "",
          seed: int = 0, eta_lo: float = -4.0, eta_hi: float = 1.0, n_eta: int = 51,
          gamma_lo: float = -1.0, gamma_hi: float = 4.0, n_gamma: int = 51, repeats: int = 20,
-         null: bool = False):
+         null: bool = False, null_eta: float = float("nan"), null_gamma: float = float("nan")):
     import io
     import sys
 
@@ -113,6 +113,7 @@ def main(scales: str = "033 060 125 250 500", subjects: str = "all", run: str = 
         meta_path.write_text(json.dumps({"run": run, "grid": grid, "seed": seed, "null": null,
                                          "gpu": "H100",
                                          "git": _git_sha(), "started": time.ctime()}, indent=2))
+    np_ = None if null_eta != null_eta else (null_eta, null_gamma)  # nan: per-scale default
     jobs = []
     for s in scales.split():
         assert s in SCALES, s
@@ -120,7 +121,7 @@ def main(scales: str = "033 060 125 250 500", subjects: str = "all", run: str = 
         subs = range(n_sub) if subjects == "all" else map(int, subjects.split())
         for sub in subs:
             if not (out / f"scale{s}" / f"sub{sub:02d}.npz").exists():
-                jobs.append((run, s, sub, grid, seed, null))
+                jobs.append((run, s, sub, grid, seed, null, np_))
     # biggest first, so the long n = 1000 calls don't trail at the end
     jobs.sort(key=lambda j: -SCALES[j[1]])
     print(f"run {run}: {len(jobs)} subject-scale jobs to do -> {out}", flush=True)

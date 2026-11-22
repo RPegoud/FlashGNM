@@ -1,0 +1,64 @@
+{
+  "run": "results/landscape_griffa_null_hi",
+  "boot": 500,
+  "seed": 0,
+  "scales": {
+    "033": {
+      "subjects": 70,
+      "eta": {
+        "median": -1.6999999999999997,
+        "between_sd": 0.12086643724448037,
+        "within_sd": 0.08179318205212954,
+        "noise_share": 0.4579549598062338,
+        "Q": 186.14505434075772,
+        "Q_df": 69,
+        "Q_p": 1.0512279384081005e-12,
+        "single_run_within_sd": 0.11651599108948904,
+        "single_run_between_sd": 0.14237750414675937
+      },
+      "gamma": {
+        "median": 2.8500000000000005,
+        "between_sd": 0.6348423778549264,
+        "within_sd": 0.47316729822339326,
+        "noise_share": 0.5555173459921418,
+        "Q": 162.1414904483855,
+        "Q_df": 69,
+        "Q_p": 1.824264509912053e-09,
+        "single_run_within_sd": 0.5998935652026727,
+        "single_run_between_sd": 0.6806294531703647
+      },
+      "corr_replicated": 0.8627905389755235,
+      "corr_replicated_p": 7.993056447249377e-22,
+      "corr_single_run": {
+        "mean": 0.781087371528669,
+        "min": 0.17000993848075227,
+        "max": 0.866393126034522
+      },
+      "within_boot_corr_median": 0.9547262426296542,
+      "within_boot_corr_defined": 70,
+      "single_run": {
+        "step_x1": {
+          "median_abs_d_eta": 0.10000000000000009,
+          "p90_abs_d_eta": 0.20000000000000018,
+          "median_abs_d_gamma": 0.5999999999999996,
+          "p90_abs_d_gamma": 1.4000000000000004,
+          "in_near_share": 0.5435714285714286
+        },
+        "step_x2": {
+          "median_abs_d_eta": 0.10000000000000009,
+          "p90_abs_d_eta": 0.20000000000000018,
+          "median_abs_d_gamma": 0.6000000000000001,
+          "p90_abs_d_gamma": 1.5,
+          "in_near_share": 0.53
+        },
+        "step_x5": {
+          "median_abs_d_eta": 0.19999999999999973,
+          "p90_abs_d_eta": 0.30000000000000027,
+          "median_abs_d_gamma": 0.8999999999999999,
+          "p90_abs_d_gamma": 1.9000000000000004,
+          "in_near_share": 0.4107142857142857
+        }
+      }
+    }
+  }
+}

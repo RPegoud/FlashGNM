@@ -95,6 +95,42 @@ The SPEC's extrapolation (220 / 150 / 90 sims/s) holds to within 15%. A 50 x 50 
 is ~11 min of generation per (resolution, density), shared across subjects. Evaluation
 not included.
 
+## Follow-ups, 2026-11-22
+
+**Group-consensus energy** (`consensus_energy/summary.json`): the leave-one-out consensus
+network (top T edges among the other 69 subjects) scored with the models' max-KS energy.
+
+| n | consensus energy | classic model | consensus better (/70) | additive held-out | consensus better than additive (/70) |
+|---|---:|---:|---:|---:|---:|
+| 68 | 0.206 | 0.229 | 49 | 0.233 | 51 |
+| 219 | 0.208 | 0.268 | 57 | 0.180 | 20 |
+| 448 | 0.253 | 0.303 | 57 | - | - |
+| 1000 | 0.327 | 0.330 | 38 | - | - |
+
+- A network with ~10x the model's edge recovery has about the same energy as the model.
+- At n = 219 the additive model beats it for 50/70 subjects.
+- Clustering binds the consensus energy for 66-70/70 subjects.
+- **Energy and wiring are different axes:** the max-KS energy can rank chance-level wiring
+  above near-correct wiring.
+
+**Null robustness, n = 68** (`analysis_null_lo/`, `analysis_null_hi/`): three null
+placements.
+
+| null placement (true eta, gamma) | eta-gamma correlation | gamma SD |
+|---|---:|---:|
+| cohort median (-1.8, 2.3) | +0.90 | 0.71 |
+| gamma 10th percentile (-1.8, 1.9) | +0.78 | 0.63 |
+| gamma 90th percentile (-1.7, 2.8) | +0.86 | 0.63 |
+| real cohort | +0.79 | 0.38 |
+
+- Real spread never exceeds the null (F p = 1.0 for all three).
+- The fit overestimates gamma at all three (+0.05 to +0.35).
+- 140/140 runs valid.
+
+**Classic kernel vs toolbox** (`tests/test_src_kernel.py --slow`): 300 networks each, AAL
+(90 regions), one parameter setting. All per-network statistics have KS p > 1e-3. The
+large-network tests at n = 1000 and 2000 also pass.
+
 ## H9: rule form (additive vs multiplicative), 2026-11-22 (`rules/README.md`)
 
 - Rule kernel with Oldham et al. 2025 conventions, checked against their MATLAB.

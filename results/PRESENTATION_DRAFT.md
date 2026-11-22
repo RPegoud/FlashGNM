@@ -11,15 +11,15 @@ runs.
 | # | Claim | Numbers | Caveat to say if asked |
 |---|---|---|---|
 | A1 | The kernel is orders of magnitude faster than the toolbox on the same GPU | n = 1000, B = 1024: 2,217 vs ~0.1 sims/s (~20,000x); n = 68: 237k vs 336 sims/s (~700x) | Toolbox times are extrapolated from timed probe steps; same H100 [`26-11-21_*_sim_*`] |
-| A2 | Every result run is validated, and the kernel matches the reference implementations | Full-run checks on every batch; 61 GPU tests for the rule kernel; reference = literal port of Oldham's MATLAB to 1e-9 | Our port of their formula, not their code run |
-| A3 | Fitted models match the *distributions*, not the *wiring*: recall equals chance in every distance bin | Classic rule, n = 68 to 1000; all three rule forms at n = 68, 219; leave-one-out group consensus is 3x to 125x above chance at > 60 mm [`recovery/`, `rules/recovery/`] | "Chance" = the model's own edge density in that bin. Euclidean distances. |
+| A2 | Every result run is validated, and the kernel matches the reference implementations | Full-run checks on every batch; 61 GPU tests for the rule kernel; reference = literal port of Oldham's MATLAB to 1e-9; classic kernel statistically indistinguishable from the toolbox (300 networks each, all KS p > 1e-3) | Toolbox check: AAL, 90 regions, one parameter setting. Oldham check: our port of their formula, not their code run |
+| A3 | Fitted models match the *distributions*, not the *wiring*: recall equals chance in every distance bin | Classic rule, n = 68 to 1000; all three rule forms at n = 68, 219; leave-one-out group consensus is 3x to 125x above chance at > 60 mm [`recovery/`, `rules/recovery/`]. The consensus network recovers ~10x more edges yet has about the same energy as the model (n = 1000: 0.327 vs 0.330); at n = 219 the additive model *beats* it on energy for 50/70 subjects [`consensus_energy/`] | "Chance" = the model's own edge density in that bin. Euclidean distances. |
 | A4 | Fitting with one simulation per point is misleading | Oldham-style search: reports energies 0.02 to 0.13 lower than fresh networks at its optimum deliver; its optima are worse than a replicated grid's for 51 to 64/70 subjects, every rule and scale, p < 1e-6 [`rules/voronoi_vs_grid.md`] | Our port of their search, on our data |
 
 **B: say it with the qualifier attached.**
 
 | # | Claim (with qualifier) | Numbers |
 |---|---|---|
-| B1 | At 68 regions, synthetic subjects with *identical* parameters reproduce the cross-subject eta-gamma correlation and spread | Correlation +0.90 (null) vs +0.79 (real); gamma SD 0.71 vs 0.38. Real spread exceeds the null only at 1000 regions (0.13 vs 0.07, p 8e-7) [`analysis_null/compare.md`]. Qualifiers: one null parameter set per scale; toolbox conventions; our correlation is *positive*, Akarca's negative, so this is about the method, not a replication of their result. |
+| B1 | At 68 regions, synthetic subjects with *identical* parameters reproduce the cross-subject eta-gamma correlation and spread | Three null placements (cohort median, 10th and 90th percentile of gamma): correlation +0.78 to +0.90 (real +0.79); gamma SD 0.63 to 0.71 (real 0.38); real spread never exceeds the null (p = 1.0). Real spread exceeds the null only at 1000 regions (0.13 vs 0.07, p 8e-7) [`analysis_null*/`]. Qualifiers: toolbox conventions; our correlation is *positive*, Akarca's negative, so this is about the method, not a replication of their result. |
 | B2 | The fit gets worse relative to real between-subject variability as resolution rises, for every rule form tested | Classic rule: 1.5x the floor at n = 68, 4.3x at n = 1000 [`noise_floor/`]. Oldham's rules: 1.35-1.44x at n = 68, 1.64-1.97x at n = 219. Qualifier: rule forms tested only up to 219. |
 | B3 | Which rule fits best depends on resolution | Held-out energy, additive vs best multiplicative: worse at n = 68 (53/70, p 7e-7), better at n = 219 (62/70, p 7e-11) [`rules/README.md`]. Qualifier: two resolutions only. |
 | B4 | Coarse grids miss the multiplicative rules' optimum | The ridge in gamma is ~0.1 wide; zooming improved the best energy by 0.05-0.09. |
@@ -52,7 +52,7 @@ runs.
 | Time | Beat | Animation | Line |
 |---|---|---|---|
 | 3:00 | **One run per point fools you [A4, B1]** | S1, then S2 | "We grew 70 synthetic subjects with *identical* parameters. Fitted the usual way, they show the same eta-gamma correlation as real subjects. And Oldham's single-run search reports a fit it can't reproduce: on fresh networks, its optimum is worse than a replicated grid's for most subjects." |
-| 4:05 | **Distributions, not wiring [A3]** | S3 | "At the best fit, every model, classic or additive, at every resolution, places edges no better than chance in each distance bin. Other people's brains predict the long-range edges far better. The models match statistics, not wiring." |
+| 4:05 | **Distributions, not wiring [A3]** | S3 | "At the best fit, every model, classic or additive, at every resolution, places edges no better than chance in each distance bin. Other people's brains predict the edges ten times better, yet score the same energy. The metric rewards statistics, not wiring." |
 | 4:45 | Close [B2, B3] | static | "And the gap to real variability grows with resolution. Questions we can now afford to ask: dense tractography, per-subject uncertainty." |
 
 ## 3. Animations for the science part (3 picks, same style as clips 1-6)
@@ -116,8 +116,13 @@ S2. Data: per-subject `.npz` on the volume `flashgnm-landscapes/griffa_full`.
 - **"Your conventions differ from Akarca / the toolbox."** Yes. Toolbox conventions for the
   classic rule; Oldham's verified conventions for H9. The same rule under the two
   conventions moves the optimum from (-1.8, 2.3) to (-4.0, 0.40).
-- **"Does the null depend on where you put it?"** One parameter set per scale (the cohort
-  median), so we can't yet say. A second null point at n = 68 costs about $1.
+- **"Does the null depend on where you put it?"** No, at n = 68: three placements (the
+  cohort median, and the 10th and 90th percentiles of gamma) all give correlations of
+  +0.78 to +0.90 and spreads larger than the real cohort.
+- **"Isn't group consensus cheating?"** It's a ceiling, not a competitor: it shows the
+  wiring is predictable from other brains. It also shows the energy can't tell the
+  difference: the consensus network has about the same energy as the model while
+  recovering ~10x more edges.
 - **"Why not their data?"** HCP Schaefer-400 isn't in the repo. MICA-MICs is packaged and
   would be next.
 - **"Speedup vs MATLAB?"** We compared against the PyTorch toolbox, not their MATLAB; don't
