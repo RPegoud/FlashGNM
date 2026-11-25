@@ -1543,3 +1543,295 @@ diff -ruN -x __pycache__ -x '*.pyc' gnm/tests/test_flash_sweep.py work/tests/tes
 +def test_bayesian_with_flash_raises():
 +    with pytest.raises(NotImplementedError):
 +        sweep(sweep_config(), "flash", method="bayesian")
+diff -ruN -x __pycache__ -x '*.pyc' gnm/docs/api-reference/fast.md work/docs/api-reference/fast.md
+--- a/docs/api-reference/fast.md	1970-01-01 00:00:00.000000000 +0000
++++ b/docs/api-reference/fast.md	2026-11-25 11:09:36.638663003 +0000
+@@ -0,0 +1,29 @@
++# gnm.fast
++
++::: gnm.fast
++    options:
++      members: false
++      show_root_heading: true
++      show_root_full_path: false
++
++## Running configurations
++
++::: gnm.fast.run_flash
++
++::: gnm.fast.flash_unsupported_reason
++
++::: gnm.fast.flash_available
++
++## Low-level kernel
++
++::: gnm.fast.FlashGNM
++    options:
++      members:
++        - run
++        - step
++        - adjacency_matrix
++        - state
++
++## Utilities
++
++::: gnm.fast.adjacency_snapshots_from_edges
+diff -ruN -x __pycache__ -x '*.pyc' gnm/docs/user-guide/flash-backend.md work/docs/user-guide/flash-backend.md
+--- a/docs/user-guide/flash-backend.md	1970-01-01 00:00:00.000000000 +0000
++++ b/docs/user-guide/flash-backend.md	2026-11-25 11:09:32.443663001 +0000
+@@ -0,0 +1,120 @@
++# Flash backend (GPU)
++
++`gnm.fast` is an optional backend for **binary** generative network models. It simulates
++the same model as [`GenerativeNetworkModel`](../api-reference/model.md), samples from the same
++distribution, and is typically 20× to 10,000× faster per simulation on a GPU, with far less
++memory. It is switched on with one argument:
++
++```python
++from gnm.fitting import perform_sweep
++
++experiments = perform_sweep(
++    sweep_config,
++    binary_evaluations=binary_evaluations,
++    real_binary_matrices=real_binary_matrices,
++    backend="flash",   # or "auto": flash where supported, torch elsewhere
++)
++```
++
++`perform_run` takes the same `backend` argument. The default, `backend="torch"`, is
++unchanged.
++
++## What it supports
++
++| | Flash backend |
++|---|---|
++| Generative rule | `MatchingIndex(divisor="mean")` |
++| Distance and preference relationships | `"powerlaw"` |
++| Heterochronicity | no heterochronous matrix (any `lambdah` with `"powerlaw"`; `lambdah = 0` with `"exponential"`) |
++| Seed networks | yes, shared `[n, n]` or per simulation `[S, n, n]` |
++| Distance matrix | one `[n, n]` matrix per run (or none: uniform distances) |
++| `prob_offset`, `binary_updates_per_iteration` | any |
++| Weighted models | no |
++| Sweep method | grid (`method="bayesian"` uses the torch backend) |
++| Hardware | a CUDA GPU (Triton ships with torch on Linux) |
++
++`backend="flash"` raises a clear error for anything else; `backend="auto"` runs those
++configurations with the torch backend. `gnm.fast.flash_unsupported_reason(run_config)`
++says why a configuration is not supported.
++
++## What differs in the results
++
++The experiments have the same structure as with the torch backend (same order, same
++evaluation keys and shapes, `experiment.model.adjacency_matrix` holds the final networks),
++with two differences:
++
++- **`run_history.adjacency_snapshots` is `None`.** The torch backend stores the whole
++  network after every step: `num_steps × num_simulations × n × n` floats, 40 GB for
++  n = 1000, 100 simulations and 1,000 steps. `run_history.added_edges` holds the same
++  information, and `gnm.fast.adjacency_snapshots_from_edges` rebuilds the snapshots when
++  they fit in memory.
++- **`clamp_count`** is nonzero exactly when the torch backend's is (some wiring weight
++  overflowed and was clamped, see the warning printed by `perform_sweep`), but counts
++  differently: steps at which a newly computed weight was clamped, maximised over
++  simulations.
++
++Random draws come from Triton's generator, seeded from torch's, so results are
++reproducible under `torch.manual_seed` but are not the same networks as the torch
++backend's for the same seed. They are draws from the same distribution.
++
++## How it works
++
++At each step the torch backend recomputes the whole matching-index matrix,
++$K = A^T A / \text{mean degree}$, which costs $O(n^3)$ for the matrix product, then the
++$n \times n$ wiring probabilities, and samples one entry. The flash backend does the same
++step in $O(n)$:
++
++1. **Two-stage sampling.** Keep the row sums $R_i = \sum_j P_{ij}$. Pick a row $i$ with
++   probability $R_i / \sum_k R_k$, then a column $j$ with probability $P_{ij} / R_i$. The
++   pair $(i, j)$ then has probability $P_{ij} / \sum P$, as with `torch.multinomial` over
++   the flattened matrix.
++2. **Incremental update.** Adding the edge $\{i, j\}$ changes only rows and columns $i$ and
++   $j$ of $A$, of the shared-neighbour counts $C = A^T A$, and of the degrees. So only rows
++   $i$ and $j$ of $P$ change (P is symmetric). They are recomputed before and after the
++   edge, and $R$ is updated by the differences, in float64.
++3. **One fused kernel.** One GPU program runs one simulation for all of its steps, so
++   there is one launch per batch instead of several per step. $P$ is never stored: the
++   state is $A$ (bool) and $C$ (int16), 3 bytes per node pair. Each simulation in a batch
++   has its own $(\eta, \gamma)$ and seed network, so a whole parameter grid fills the GPU.
++
++## Performance
++
++Measured on an NVIDIA H100 (torch 2.8, Triton 3.4), one $(\eta, \gamma)$ per simulation,
++T = the number of edges of a Lausanne connectome at that resolution. Simulation only, without
++evaluation. Toolbox times were extrapolated from its first steps (`~`).
++
++| n | simulations per batch | steps | toolbox (sims/s) | flash (sims/s) |
++|---:|---:|---:|---:|---:|
++| 68 | 1,024 | 610 | ~336 | 6,607 |
++| 219 | 1,024 | 2,639 | ~7.3 | 5,811 |
++| 1000 | 64 | 10,785 | ~0.1 | 671 |
++| 1000 | 1,024 | 10,785 | ~0.1 | 1,854 |
++
++At n = 1000 and 1,024 simulations the toolbox needs ~50 GB of GPU memory and the flash
++backend 3.2 GB. `scripts/benchmark_flash.py` measures both on your GPU.
++
++With the flash backend, evaluation (the KS criteria, especially betweenness) usually costs
++more time than simulation.
++
++## Checking it on your machine
++
++The tests compare the kernel with the toolbox's own maths:
++
++```bash
++pytest tests/test_flash_kernel.py tests/test_flash_sweep.py -v       # ~1 min on a GPU
++GNM_RUN_SLOW=1 pytest tests/test_flash_kernel.py -v -k toolbox        # vs GenerativeNetworkModel
++```
++
++- the starting state, and the state after any sequence of added edges, equals a
++  from-scratch recomputation with `MatchingIndex` (exact for $A$, $C$ and the degrees;
++  $10^{-5}$ relative for the row sums);
++- given the same uniform random numbers, every sampled edge is the one inverse-CDF
++  sampling picks from the toolbox's wiring weights;
++- the sampled edges follow $P / \sum P$ (chi-square), edges are always new, and networks
++  can be grown to completion;
++- overflowing weights are clamped as in the toolbox;
++- networks grown by the kernel and by `GenerativeNetworkModel` have the same distributions of
++  degree, clustering and edge length (two-sample KS; the slow test).
++
++Without a GPU, `TRITON_INTERPRET=1 pytest tests/test_flash_*.py` runs the same tests in
++Triton's CPU interpreter, slowly; the slow test is skipped there.
+--- a/README.md	2026-11-25 08:59:10.195264003 +0000
++++ b/README.md	2026-11-25 11:09:44.998663007 +0000
+@@ -37,6 +37,22 @@
+ 
+ See the [examples overview](docs/examples/index.md) for run instructions.
+ 
++### Fast binary sweeps on a GPU
++
++For binary models with the matching index and power-law terms, `backend="flash"` runs a
++sweep with a fused GPU kernel that does O(n) work per step instead of O(n³):
++
++```python
++experiments = perform_sweep(sweep_config, binary_evaluations=..., real_binary_matrices=...,
++                            backend="flash")  # "auto": flash where supported, torch elsewhere
++```
++
++It samples from the same distribution as `GenerativeNetworkModel` and returns the same
++experiments, without per-step adjacency snapshots. On an H100 it runs ~1,850 simulations
++per second at n = 1000 (the default backend: ~0.1). See the
++[flash backend guide](docs/user-guide/flash-backend.md) for what it supports and how to
++check it.
++
+ ### Package behaviour
+ 
+ The package validates matrix values, shapes, and types before it runs a model.
+--- a/mkdocs.yml	2026-11-25 08:59:10.248303003 +0000
++++ b/mkdocs.yml	2026-11-25 11:09:36.815295420 +0000
+@@ -45,6 +45,7 @@
+   - User Guide: 
+     - Overview: user-guide/index.md
+     - Design Philosophy: user-guide/design-philosophy.md
++    - Flash Backend (GPU): user-guide/flash-backend.md
+   - Understanding Generative Network Models: 
+     - Overview: understanding-gnms/index.md
+     - Glossary: understanding-gnms/glossary.md
+@@ -71,5 +72,6 @@
+     - weight_criteria: api-reference/weight-criteria.md
+     - evaluation: api-reference/evaluation.md
+     - fitting: api-reference/fitting.md
++    - fast: api-reference/fast.md
+     - defaults: api-reference/defaults.md
+     - utils: api-reference/utils.md
+diff -ruN -x __pycache__ gnm/scripts/benchmark_flash.py work/scripts/benchmark_flash.py
+--- a/scripts/benchmark_flash.py	1970-01-01 00:00:00.000000000 +0000
++++ b/scripts/benchmark_flash.py	2026-11-25 11:10:49.063092259 +0000
+@@ -0,0 +1,89 @@
++"""Simulation speed: GenerativeNetworkModel (torch backend) vs gnm.fast.FlashGNM.
++
++    python scripts/benchmark_flash.py                         # n = 90 (default data), 400 edges
++    python scripts/benchmark_flash.py --n 1000 --steps 10000 --sims 64 1024
++
++Each simulation has its own (eta, gamma) for the flash kernel; the toolbox runs one
++(eta, gamma) with all simulations (its fastest case). The toolbox is timed on its first
++--toolbox-steps steps and extrapolated linearly; it is skipped when its per-step adjacency
++snapshots (steps x sims x n x n floats) would exceed 20 GB. Simulation only, no evaluation.
++"""
++
++import argparse
++import time
++
++import torch
++
++from gnm import BinaryGenerativeParameters, GenerativeNetworkModel
++from gnm.defaults import get_distance_matrix
++from gnm.fast import FlashGNM
++from gnm.generative_rules import MatchingIndex
++
++
++def distances(n: int, device) -> torch.Tensor:
++    if n == 90:
++        return get_distance_matrix().to(device)
++    x = torch.rand(n, 3, generator=torch.Generator().manual_seed(0))
++    return torch.cdist(x, x).to(device)
++
++
++def sync():
++    if torch.cuda.is_available():
++        torch.cuda.synchronize()
++
++
++def time_toolbox(D, sims, steps, probe):
++    probe = min(probe, steps)
++    bp = BinaryGenerativeParameters(
++        eta=-2.0, gamma=0.3, lambdah=0.0, distance_relationship_type="powerlaw",
++        preferential_relationship_type="powerlaw", heterochronicity_relationship_type="powerlaw",
++        generative_rule=MatchingIndex(), num_iterations=probe)
++    torch.cuda.reset_peak_memory_stats()
++    sync(); t0 = time.perf_counter()
++    model = GenerativeNetworkModel(binary_parameters=bp, num_simulations=sims,
++                                   distance_matrix=D, device=D.device)
++    model.run_model()
++    sync()
++    seconds = (time.perf_counter() - t0) * steps / probe
++    return seconds, torch.cuda.max_memory_allocated() / 2**30
++
++
++def time_flash(D, sims, steps):
++    eta = torch.linspace(-3, 0, sims, device=D.device)
++    gamma = torch.linspace(0, 1, sims, device=D.device)
++    FlashGNM(D, eta[:1], gamma[:1]).run(min(steps, 10))  # compile once
++    torch.cuda.reset_peak_memory_stats()
++    sync(); t0 = time.perf_counter()
++    FlashGNM(D, eta, gamma).run(steps)
++    sync()
++    return time.perf_counter() - t0, torch.cuda.max_memory_allocated() / 2**30
++
++
++def main():
++    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    p.add_argument("--n", type=int, default=90)
++    p.add_argument("--steps", type=int, default=400)
++    p.add_argument("--sims", type=int, nargs="+", default=[64, 1024])
++    p.add_argument("--toolbox-steps", type=int, default=50)
++    p.add_argument("--skip-toolbox", action="store_true")
++    a = p.parse_args()
++    assert torch.cuda.is_available(), "needs a CUDA GPU"
++    D = distances(a.n, torch.device("cuda"))
++    print(f"{torch.cuda.get_device_name()}, n = {a.n}, {a.steps} steps")
++    print(f"{'sims':>6} {'backend':>8} {'seconds':>10} {'sims/s':>10} {'peak GB':>8}")
++    for S in a.sims:
++        rows = [("flash", *time_flash(D, S, a.steps))]
++        snapshots_gb = min(a.toolbox_steps, a.steps) * S * a.n * a.n * 4 / 2**30
++        if a.skip_toolbox:
++            pass
++        elif snapshots_gb > 20:
++            print(f"{S:>6} {'torch~':>8}  skipped: {snapshots_gb:.0f} GB of snapshots")
++        else:
++            rows.append(("torch~", *time_toolbox(D, S, a.steps, a.toolbox_steps)))
++        for name, sec, gb in rows:
++            print(f"{S:>6} {name:>8} {sec:>10.3f} {S / sec:>10.1f} {gb:>8.2f}")
++    print("torch~: extrapolated from the first --toolbox-steps steps")
++
++
++if __name__ == "__main__":
++    main()
