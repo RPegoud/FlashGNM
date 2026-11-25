@@ -8,9 +8,9 @@
 Every test also runs against the reference itself ("reference" params), which checks
 the harness. The kernel side ("triton" params) is skipped until it exists.
 
-Contract for `kernel.TritonGNM` (internal layout and dtypes are free):
+Contract for `kernel.FlashGNM` (internal layout and dtypes are free):
 
-    sim = TritonGNM(dist, eta, gamma)
+    sim = FlashGNM(dist, eta, gamma)
         dist [n, n] float32, symmetric, diagonal 1 (masked anyway; avoids 0**eta)
         eta, gamma [B] float32: one parameter setting per simulation
     sim.step(u=None, edges=None) -> [B, 2] int (row, col) of the edge added
@@ -43,9 +43,9 @@ STEPS = {12: 60, 68: 200, 130: 120}
 
 
 def _triton_factory(dist, eta, gamma):
-    from kernel import TritonGNM
+    from kernel import FlashGNM
 
-    return TritonGNM(dist, eta, gamma)
+    return FlashGNM(dist, eta, gamma)
 
 
 @pytest.fixture(params=["reference", "triton"])
@@ -55,9 +55,9 @@ def factory(request, triton_runnable):
     if not triton_runnable:
         pytest.skip("no GPU: set TRITON_INTERPRET=1 to run the kernel on CPU")
     try:
-        from kernel import TritonGNM  # noqa: F401
+        from kernel import FlashGNM  # noqa: F401
     except (ImportError, AttributeError):
-        pytest.skip("kernel.TritonGNM not implemented yet")
+        pytest.skip("kernel.FlashGNM not implemented yet")
     return _triton_factory
 
 

@@ -125,7 +125,7 @@ def run_subject(scale: str, subject: int, grid: Grid, device: torch.device,
                 batch: int | None = None, seed: int = 0, n_validate: int = 4,
                 mem_bytes: int = 8 * 1024**3, log=print) -> dict:
     from src import evaluation as ev
-    from src.kernel import TritonGNM
+    from src.kernel import FlashGNM
 
     D, target_fn, _ = load_griffa(scale)
     n = D.shape[0]
@@ -148,7 +148,7 @@ def run_subject(scale: str, subject: int, grid: Grid, device: torch.device,
         torch.manual_seed(seed * 1_000_003 + subject * 1009 + bi)  # kernel seed from torch RNG
         sync()
         t0 = time.perf_counter()
-        sim = TritonGNM(D1, eta[lo:hi].to(device), gamma[lo:hi].to(device))
+        sim = FlashGNM(D1, eta[lo:hi].to(device), gamma[lo:hi].to(device))
         edges = sim.run(T)
         sync()
         t1 = time.perf_counter()

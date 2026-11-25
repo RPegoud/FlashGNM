@@ -9,11 +9,11 @@ for T steps, peak GPU memory, ms/step and simulations/s for a realistic fit.
     modal run bench/modal_bench.py --args "--impls triton_proto --n 1000"   # on a Modal GPU
 
 Implementations (`--impls`):
-    triton_proto    prep/kernel/kernel.py TritonGNM, persistent kernel, T steps in one launch
+    triton_proto    prep/kernel/kernel.py FlashGNM, persistent kernel, T steps in one launch
     rowsampled      prep/kernel/row_sampled.py, O(n)/step PyTorch, eager      (extrapolated)
     leandense       prep/kernel/lean_dense.py, the fair dense baseline        (extrapolated)
     toolbox         gnm.GenerativeNetworkModel.binary_update, unchanged       (extrapolated)
-    pkg.mod:Class   any class with the TritonGNM contract:
+    pkg.mod:Class   any class with the FlashGNM contract:
                         sim = Class(dist [n,n] f32 diag 1, eta [B] f32, gamma [B] f32)
                         sim.run(T) -> [B, T, 2]      (or sim.step() if it has no run)
                     Module paths resolve from the repo root and prep/kernel.
@@ -111,7 +111,7 @@ def _diag1(dist0):
 
 
 class ContractImpl(Impl):
-    """Any class with the TritonGNM contract (constructor + run(T), or step())."""
+    """Any class with the FlashGNM contract (constructor + run(T), or step())."""
 
     def __init__(self, name, cls):
         self.name, self.cls = name, cls
@@ -187,9 +187,9 @@ class ToolboxImpl(Impl):
 
 def get_impl(spec: str) -> Impl:
     if spec == "triton_proto":
-        from kernel import TritonGNM
+        from kernel import FlashGNM
 
-        return ContractImpl("triton_proto", TritonGNM)
+        return ContractImpl("triton_proto", FlashGNM)
     if spec == "rowsampled":
         return RowSampledImpl()
     if spec == "leandense":

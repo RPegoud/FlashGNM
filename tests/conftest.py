@@ -1,6 +1,6 @@
 """Run the prototype's test harness (prep/kernel/test_kernel.py) against src/kernel.py.
 
-The harness imports `kernel.TritonGNM`; we register src.kernel under that name before it
+The harness imports `kernel.FlashGNM`; we register src.kernel under that name before it
 is imported, and reuse prep/kernel/conftest.py's options and fixtures.
 """
 

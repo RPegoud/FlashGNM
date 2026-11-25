@@ -32,7 +32,7 @@ def default_num_warps(n: int) -> int:
     return max(2, min(16, triton.next_power_of_2(n) // 128))
 
 
-class TritonGNM:
+class FlashGNM:
     def __init__(
         self,
         dist: torch.Tensor,
