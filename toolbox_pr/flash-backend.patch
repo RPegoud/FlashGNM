@@ -1,0 +1,1545 @@
+diff -ruN -x __pycache__ -x '*.pyc' gnm/src/gnm/fast/__init__.py work/src/gnm/fast/__init__.py
+--- a/src/gnm/fast/__init__.py	1970-01-01 00:00:00.000000000 +0000
++++ b/src/gnm/fast/__init__.py	2026-11-25 09:59:17.230302011 +0000
+@@ -0,0 +1,33 @@
++r"""Flash backend: a fused GPU kernel for binary GNMs with O(n) work per step.
++
++For the matching index (mean divisor) with power-law distance and preference terms, the
++kernel samples from the same distribution as
++[`GenerativeNetworkModel`][gnm.GenerativeNetworkModel], with far less work and memory per
++step, and runs many parameter combinations in one launch. It needs a CUDA GPU and Triton
++(installed with torch on Linux).
++
++Most users only need the `backend` argument of the sweep functions:
++
++    >>> from gnm.fitting import perform_sweep
++    >>> experiments = perform_sweep(sweep_config, binary_evaluations=..., real_binary_matrices=...,
++    ...                             backend="flash")   # or "auto": flash where supported
++
++Lower-level pieces:
++
++- [`FlashGNM`][gnm.fast.FlashGNM]: a batch of simulations, each with its own (eta, gamma).
++- [`run_flash`][gnm.fast.run_flash]: many [`RunConfig`][gnm.fitting.RunConfig]s, packed
++  into large launches.
++- [`flash_unsupported_reason`][gnm.fast.flash_unsupported_reason]: whether a run
++  configuration can use the backend.
++"""
++
++from .kernel import FlashGNM, flash_available
++from .runner import adjacency_snapshots_from_edges, flash_unsupported_reason, run_flash
++
++__all__ = [
++    "FlashGNM",
++    "flash_available",
++    "flash_unsupported_reason",
++    "run_flash",
++    "adjacency_snapshots_from_edges",
++]
+diff -ruN -x __pycache__ -x '*.pyc' gnm/src/gnm/fast/kernel.py work/src/gnm/fast/kernel.py
+--- a/src/gnm/fast/kernel.py	1970-01-01 00:00:00.000000000 +0000
++++ b/src/gnm/fast/kernel.py	2026-11-25 09:58:19.733993012 +0000
+@@ -0,0 +1,434 @@
++# type: ignore  (Triton kernels are not jaxtyped)
++r"""Fused Triton kernel for the binary GNM: matching index (mean divisor), power-law
++distance and preference terms.
++
++This computes the same model as
++[`GenerativeNetworkModel.binary_update`][gnm.GenerativeNetworkModel.binary_update]
++with `MatchingIndex(divisor="mean")` and power-law relationships:
++
++$$
++    P_{ij} = D_{ij}^{\eta} K_{ij}^{\gamma} + \epsilon,
++$$
++
++where $K_{ij} = 0$ is first replaced by $\epsilon$ (`prob_offset`), and $P_{ij} = 0$ on
++edges and the diagonal. Non-finite weights are clamped as in the toolbox
++(`nan -> 0`, `inf -> 1e30`).
++
++It computes it differently. The toolbox recomputes the whole $n \times n$ matrix every
++step ($O(n^3)$ per step for $A^T A$). Here one GPU program runs one simulation for all
++its steps, and each step costs $O(n)$:
++
++1. Sample a row $i$ with probability $R_i / \sum_k R_k$, where $R_i = \sum_j P_{ij}$, then
++   a column $j$ with probability $P_{ij} / R_i$. This is the same distribution as sampling
++   the pair $(i, j)$ from $P / \sum P$ (the toolbox's `multinomial` over the flattened
++   matrix).
++2. Add the edge $\{i, j\}$. Only rows (and, by symmetry, columns) $i$ and $j$ of
++   $C = A^T A$, of the degrees and therefore of $P$ change.
++3. Recompute rows $i$ and $j$ of $P$ before and after the edge, and update $R$ by the
++   differences.
++
++$P$ is never stored. The state per simulation is $A$ (bool), $C$ (int16) and the degrees,
++3 bytes per node pair, and $R$ (float64, one value per node). Simulations in a batch can
++have different $(\eta, \gamma)$ and seed networks, and share the distance matrix.
++"""
++
++from __future__ import annotations
++
++import os
++from typing import Optional
++
++import torch
++
++try:
++    import triton
++    import triton.language as tl
++
++    _TRITON_IMPORT_ERROR = None
++except ImportError as e:  # pragma: no cover: CPU-only installs
++    triton = None
++    _TRITON_IMPORT_ERROR = e
++
++CLAMP_MAX = 1e30  # the toolbox's nan_to_num(posinf=1e30)
++
++
++def flash_available(device: Optional[torch.device | str] = None) -> bool:
++    r"""True if the kernel can run on `device` (default: CUDA if available).
++
++    It needs Triton and a CUDA device, or Triton's CPU interpreter (set
++    `TRITON_INTERPRET=1` before importing triton; slow, for tests only).
++    """
++    if triton is None:
++        return False
++    if device is None:
++        device = "cuda" if torch.cuda.is_available() else "cpu"
++    device = torch.device(device)
++    if device.type == "cuda":
++        return torch.cuda.is_available()
++    return os.environ.get("TRITON_INTERPRET") == "1"
++
++
++if triton is not None:
++
++    @triton.jit
++    def _row_P(C_row, A_row, Dist_row, Deg, deg_x, x, Eta, Gamma, cols, mask, OFFSET):
++        """Row x of P from row x of C and A, all degrees and row x of the distances.
++
++        Returns the row (zero on edges, the diagonal and padded lanes) and the number of
++        entries that were inf or nan before clamping.
++        """
++        # mean divisor: (deg_x + deg_y - A_xy - A_yx) / 2; zero only on an edge lane
++        denom = (deg_x + Deg - 2 * A_row) / 2
++        denom = tl.where(denom == 0, 1, denom)
++        K_row = C_row / denom
++        K_row = tl.where(K_row == 0, OFFSET, K_row)
++        # x ** y = exp(y * log(x)); 0 ** 0 = 1 as in torch.pow
++        D_eta = tl.where(Eta == 0, 1.0, tl.exp(Eta * tl.log(Dist_row)))
++        K_gamma = tl.exp(Gamma * tl.log(K_row))
++        P_row = D_eta * K_gamma + OFFSET
++        valid = mask & (A_row == 0) & (cols != x)
++        nonfinite = (P_row * 0.0) != 0.0  # inf * 0 and nan * 0 are nan
++        # the toolbox's nan_to_num(nan=0, posinf=1e30) (CLAMP_MAX)
++        P_row = tl.where(P_row != P_row, 0.0, tl.where(nonfinite, 1e30, P_row))
++        bad = (valid & nonfinite).to(tl.int32)
++        return tl.where(valid, P_row, 0.0), tl.sum(bad)
++
++    @triton.jit
++    def _sample_cdf(W, U):
++        """Index of the first entry whose inclusive cdf exceeds U * sum(W) (fp64)."""
++        cdf = tl.cumsum(W.to(tl.float64), axis=-1)
++        t = U.to(tl.float64) * tl.max(cdf)
++        return tl.sum((cdf <= t).to(tl.int32), axis=-1)
++
++    @triton.jit
++    def _uniform(U_ptr, t, k, SEED, pid, SHARED_UNIFORM: tl.constexpr):
++        """Draw k (0: row, 1: column) of step t: from U if given, else the kernel RNG."""
++        if SHARED_UNIFORM:
++            u = tl.load(U_ptr + 2 * t + k)
++        else:
++            u = tl.rand(SEED + t, 2 * pid + k)
++        return u
++
++    @triton.jit
++    def _load_row(A_ptr, C_ptr, Dist_ptr, Deg, x, cols, mask, N):
++        """Row x of A, C and the distances (padded with 1, so log stays finite), deg[x]."""
++        offs = x * N + cols
++        A_row = tl.load(A_ptr + offs, mask=mask, other=0)
++        C_row = tl.load(C_ptr + offs, mask=mask, other=0)
++        Dist_row = tl.load(Dist_ptr + offs, mask=mask, other=1.0)
++        deg_x = tl.sum(tl.where(cols == x, Deg, 0))
++        return A_row, C_row, Dist_row, deg_x
++
++    @triton.jit
++    def _store_sym(ptr, x, row, old_row, cols, mask, N):
++        """Write row x and, where it changed, column x."""
++        tl.store(ptr + x * N + cols, value=row, mask=mask)
++        tl.store(ptr + x + cols * N, value=row, mask=mask & (old_row != row))
++
++    @triton.jit(do_not_specialize=["T", "SEED"])
++    def _binary_gnm_kernel(
++        A_ptr,  # [B, N, N] bool
++        C_ptr,  # [B, N, N] int16
++        R_ptr,  # [B, N] float64
++        Deg_ptr,  # [B, N] int16
++        Clamp_ptr,  # [B] int32: steps with a clamped weight (accumulated)
++        Eta_ptr,  # [B] float32
++        Gamma_ptr,  # [B] float32
++        Dist_ptr,  # [N, N] float32, shared by the batch, diagonal 1
++        U_ptr,  # [B, T, 2] float32 if SHARED_UNIFORM
++        Edges_ptr,  # [B, T, 2] int32 if EDGES_GIVEN
++        Out_ptr,  # [B, T, 2] int32: the edges added
++        N,
++        T,
++        OFFSET,
++        SEED,
++        BLOCK_N: tl.constexpr,  # next_power_of_2(N): one whole row per program
++        EDGES_GIVEN: tl.constexpr,  # teacher forcing: apply Edges instead of sampling
++        SHARED_UNIFORM: tl.constexpr,  # sample with U instead of tl.rand
++    ):
++        pid = tl.program_id(0)
++        pid64 = pid.to(tl.int64)  # B * N^2 and B * 2T overflow int32 at large B
++        sim = pid64 * N * N
++        A_ptr += sim
++        C_ptr += sim
++        R_ptr += pid64 * N
++        Deg_ptr += pid64 * N
++        U_ptr += pid64 * 2 * T
++        Edges_ptr += pid64 * 2 * T
++        Out_ptr += pid64 * 2 * T
++
++        cols = tl.arange(0, BLOCK_N)
++        mask = cols < N
++        Eta = tl.load(Eta_ptr + pid)
++        Gamma = tl.load(Gamma_ptr + pid)
++        R = tl.load(R_ptr + cols, mask=mask, other=0.0)
++        Deg = tl.load(Deg_ptr + cols, mask=mask, other=0)
++        clamped = tl.load(Clamp_ptr + pid)
++
++        for t in tl.range(T):
++            # 1. row i, and the old rows of i
++            if EDGES_GIVEN:
++                i = tl.load(Edges_ptr + 2 * t).to(tl.int32)
++            else:
++                i = _sample_cdf(R, _uniform(U_ptr, t, 0, SEED, pid, SHARED_UNIFORM))
++            old_Ai, old_Ci, Dist_i, deg_i = _load_row(
++                A_ptr, C_ptr, Dist_ptr, Deg, i, cols, mask, N
++            )
++            old_Pi, _ = _row_P(
++                old_Ci, old_Ai, Dist_i, Deg, deg_i, i, Eta, Gamma, cols, mask, OFFSET
++            )
++
++            # 2. column j, and the old rows of j
++            if EDGES_GIVEN:
++                j = tl.load(Edges_ptr + 2 * t + 1).to(tl.int32)
++            else:
++                j = _sample_cdf(old_Pi, _uniform(U_ptr, t, 1, SEED, pid, SHARED_UNIFORM))
++            old_Aj, old_Cj, Dist_j, deg_j = _load_row(
++                A_ptr, C_ptr, Dist_ptr, Deg, j, cols, mask, N
++            )
++            old_Pj, _ = _row_P(
++                old_Cj, old_Aj, Dist_j, Deg, deg_j, j, Eta, Gamma, cols, mask, OFFSET
++            )
++
++            # 3. add edge (i, j): degrees, A rows (registers), C rows and columns.
++            # C' = C + A_i e_j^T + A_j e_i^T + transpose + e_i e_i^T + e_j e_j^T (old A)
++            Deg = tl.where((cols == i) | (cols == j), Deg + 1, Deg)
++            deg_i += 1
++            deg_j += 1
++            Ai = old_Ai + tl.where(cols == j, 1, 0)
++            Aj = old_Aj + tl.where(cols == i, 1, 0)
++            Ci = old_Ci + old_Aj + tl.where(cols == i, 1, 0)
++            Cj = old_Cj + old_Ai + tl.where(cols == j, 1, 0)
++            _store_sym(C_ptr, i, Ci, old_Ci, cols, mask, N)
++            _store_sym(C_ptr, j, Cj, old_Cj, cols, mask, N)
++
++            # 4. new rows of P, R patched by deltas (fp64); rows i and j summed exactly.
++            # Every entry of P that changes is in row (or, by symmetry, column) i or j.
++            Pi, bad_i = _row_P(Ci, Ai, Dist_i, Deg, deg_i, i, Eta, Gamma, cols, mask, OFFSET)
++            Pj, bad_j = _row_P(Cj, Aj, Dist_j, Deg, deg_j, j, Eta, Gamma, cols, mask, OFFSET)
++            clamped += ((bad_i + bad_j) > 0).to(tl.int32)
++            R += (Pi.to(tl.float64) - old_Pi.to(tl.float64)) + (
++                Pj.to(tl.float64) - old_Pj.to(tl.float64)
++            )
++            sum_i = tl.sum(Pi.to(tl.float64))
++            sum_j = tl.sum(Pj.to(tl.float64))
++            R = tl.where(cols == i, sum_i, tl.where(cols == j, sum_j, R))
++
++            tl.store(Out_ptr + 2 * t, value=i)
++            tl.store(Out_ptr + 2 * t + 1, value=j)
++
++            # 5. A[i, j] = A[j, i] = 1. Other threads may still be reading the old A rows,
++            # so these stores must come after a reduction over those rows (the sums above).
++            tl.store(A_ptr + i * N + j, value=1)
++            tl.store(A_ptr + j * N + i, value=1)
++            tl.debug_barrier()  # all writes of step t visible before step t + 1 loads
++
++        tl.store(Deg_ptr + cols, value=Deg, mask=mask)
++        tl.store(R_ptr + cols, value=R, mask=mask)
++        tl.store(Clamp_ptr + pid, value=clamped)
++
++
++def default_num_warps(n: int) -> int:
++    """One warp per 128 columns, clamped to [2, 16] (best or within 6% of best on an H100
++    at n = 68 to 2000; fewer warps spill registers at n = 2000)."""
++    return max(2, min(16, triton.next_power_of_2(n) // 128))
++
++
++class FlashGNM:
++    r"""A batch of B binary GNM simulations on the GPU, each with its own $(\eta, \gamma)$.
++
++    This is the low-level interface. Most users want
++    `perform_sweep(..., backend="flash")` or
++    [`run_flash`][gnm.fast.run_flash], which build these batches from
++    [`RunConfig`][gnm.fitting.RunConfig] objects.
++
++    Args:
++        distance_matrix: [n, n] symmetric, non-negative distances, shared by the batch.
++            The diagonal is ignored.
++        eta: [B] distance exponents.
++        gamma: [B] matching-index exponents.
++        seed_adjacency_matrix: optional [n, n] or [B, n, n] binary, symmetric, zero
++            diagonal. Defaults to empty networks.
++        prob_offset: $\epsilon$, as in
++            [`BinaryGenerativeParameters`][gnm.BinaryGenerativeParameters].
++        num_warps: Triton warps per simulation; the default suits n = 68 to 2000.
++
++    Examples:
++        >>> import torch
++        >>> from gnm.defaults import get_distance_matrix
++        >>> from gnm.fast import FlashGNM
++        >>> D = get_distance_matrix().cuda()
++        >>> eta = torch.tensor([-2.0, -1.0, -3.0]).cuda()
++        >>> gamma = torch.tensor([0.3, 0.5, 0.2]).cuda()
++        >>> sim = FlashGNM(D, eta, gamma)
++        >>> edges = sim.run(400)            # [3, 400, 2]: the edges added
++        >>> sim.adjacency_matrix().shape    # float32, like the toolbox
++        torch.Size([3, 90, 90])
++    """
++
++    # Bytes of temporaries per (simulation, pair) when computing the initial row sums.
++    INIT_BYTES_PER_PAIR = 40
++
++    def __init__(
++        self,
++        distance_matrix: torch.Tensor,
++        eta: torch.Tensor,
++        gamma: torch.Tensor,
++        seed_adjacency_matrix: Optional[torch.Tensor] = None,
++        prob_offset: float = 1e-6,
++        num_warps: Optional[int] = None,
++    ):
++        if triton is None:
++            raise ImportError(
++                "The flash backend needs Triton (installed with torch on Linux with CUDA)."
++            ) from _TRITON_IMPORT_ERROR
++        device = distance_matrix.device
++        if not flash_available(device):
++            raise RuntimeError(
++                f"The flash backend needs a CUDA device (got {device}); on CPU set "
++                "TRITON_INTERPRET=1 before importing triton (slow, for tests only)."
++            )
++        eta = torch.as_tensor(eta).reshape(-1)
++        gamma = torch.as_tensor(gamma).reshape(-1)
++        B, N = eta.shape[0], distance_matrix.shape[-1]
++        if distance_matrix.shape != (N, N):
++            raise ValueError(f"distance_matrix must be [n, n], got {tuple(distance_matrix.shape)}")
++        if gamma.shape[0] != B:
++            raise ValueError(f"eta and gamma must have the same length, got {B} and {gamma.shape[0]}")
++        if N > 32767:
++            raise ValueError("n must be < 32768 (int16 shared-neighbour counts)")
++
++        self.device, self.B, self.N = device, B, N
++        self.prob_offset = float(prob_offset)
++        self.num_warps = num_warps or default_num_warps(N)
++        self.base_seed = int(torch.randint(0, 2**30, (1,)).item())  # follows torch.manual_seed
++        self.t = 0
++
++        D = distance_matrix.to(device, torch.float32).clone()
++        D.fill_diagonal_(1.0)  # masked anyway; avoids log(0) on the diagonal
++        self.D = D.contiguous()
++        self.eta = eta.to(device, torch.float32).contiguous()
++        self.gamma = gamma.to(device, torch.float32).contiguous()
++
++        if seed_adjacency_matrix is None:
++            self.A = torch.zeros((B, N, N), device=device, dtype=torch.bool)
++            self.C = torch.zeros((B, N, N), device=device, dtype=torch.int16)
++            self.deg = torch.zeros((B, N), device=device, dtype=torch.int16)
++        else:
++            seed = seed_adjacency_matrix.to(device)
++            if seed.dim() == 2:
++                seed = seed.unsqueeze(0).expand(B, N, N)
++            if seed.shape != (B, N, N):
++                raise ValueError(
++                    f"seed_adjacency_matrix must be [n, n] or [B, n, n], got {tuple(seed.shape)}"
++                )
++            self.A = (seed != 0).contiguous()
++            if not torch.equal(self.A, self.A.transpose(-1, -2)):
++                raise ValueError("seed_adjacency_matrix must be symmetric")
++            if self.A.diagonal(dim1=-2, dim2=-1).any():
++                raise ValueError("seed_adjacency_matrix must have a zero diagonal")
++            self.C = torch.empty((B, N, N), device=device, dtype=torch.int16)
++            for s in range(B):  # exact in fp32 up to 2^24 shared neighbours
++                a = self.A[s].to(torch.float32)
++                self.C[s] = (a @ a).to(torch.int16)
++            self.deg = self.A.sum(-1, dtype=torch.int16)
++
++        self.clamp_count = torch.zeros(B, device=device, dtype=torch.int32)
++        self.R = self._init_R()
++
++    # -- initial state
++    def _block_P(self, s: int, e: int) -> tuple[torch.Tensor, torch.Tensor]:
++        """Full P for simulations s:e, [e - s, n, n] float32, and per-simulation counts of
++        clamped entries."""
++        A = self.A[s:e]
++        deg = self.deg[s:e].to(torch.float32)
++        denom = (deg.unsqueeze(-2) + deg.unsqueeze(-1) - 2 * A.to(torch.float32)) / 2
++        denom.masked_fill_(denom == 0, 1.0)
++        K = self.C[s:e].to(torch.float32).div_(denom)
++        del denom
++        K.masked_fill_(K == 0, self.prob_offset)
++        P = K.pow_(self.gamma[s:e].view(-1, 1, 1))
++        P.mul_(self.D.pow(self.eta[s:e].view(-1, 1, 1))).add_(self.prob_offset)
++        P.masked_fill_(A, 0.0)
++        P.diagonal(dim1=-2, dim2=-1).zero_()
++        bad = (~torch.isfinite(P)).flatten(1).any(-1).to(torch.int32)
++        torch.nan_to_num_(P, nan=0.0, posinf=CLAMP_MAX, neginf=0.0)
++        return P, bad
++
++    def _init_R(self) -> torch.Tensor:
++        """float64 row sums of P, in blocks of simulations to bound temporary memory."""
++        if self.device.type == "cuda":
++            free = torch.cuda.mem_get_info(self.device)[0]
++            budget = min(free // 4, 8 * 2**30)
++        else:
++            budget = 2**30
++        block = max(1, min(self.B, budget // (self.INIT_BYTES_PER_PAIR * self.N * self.N)))
++        R = torch.empty(self.B, self.N, device=self.device, dtype=torch.float64)
++        for s in range(0, self.B, block):
++            e = min(s + block, self.B)
++            P, bad = self._block_P(s, e)
++            R[s:e] = P.sum(-1, dtype=torch.float64)
++            self.clamp_count[s:e] += bad
++        return R
++
++    # -- stepping
++    def _launch(self, T: int, u=None, edges=None) -> torch.Tensor:
++        out = torch.empty((self.B, T, 2), dtype=torch.int32, device=self.device)
++        if T == 0:
++            return out
++        if u is not None:
++            u = u.to(self.device, torch.float32).reshape(self.B, T, 2).contiguous()
++        if edges is not None:
++            edges = edges.to(self.device, torch.int32).reshape(self.B, T, 2).contiguous()
++        _binary_gnm_kernel[(self.B,)](
++            A_ptr=self.A,
++            C_ptr=self.C,
++            R_ptr=self.R,
++            Deg_ptr=self.deg,
++            Clamp_ptr=self.clamp_count,
++            Eta_ptr=self.eta,
++            Gamma_ptr=self.gamma,
++            Dist_ptr=self.D,
++            U_ptr=out if u is None else u,  # placeholder when unused
++            Edges_ptr=out if edges is None else edges,
++            Out_ptr=out,
++            N=self.N,
++            T=T,
++            OFFSET=self.prob_offset,
++            SEED=self.base_seed + self.t,
++            BLOCK_N=triton.next_power_of_2(self.N),
++            EDGES_GIVEN=edges is not None,
++            SHARED_UNIFORM=u is not None,
++            num_warps=self.num_warps,
++        )
++        self.t += T
++        return out
++
++    def run(self, num_steps: int, u=None, edges=None) -> torch.Tensor:
++        r"""Add `num_steps` edges to every simulation in one kernel launch.
++
++        Args:
++            num_steps: edges to add. Must not exceed the number of missing edges.
++            u: optional [B, num_steps, 2] uniforms in [0, 1) (row draw, column draw),
++                instead of the kernel's random numbers. For testing.
++            edges: optional [B, num_steps, 2] edges to add instead of sampling
++                (teacher forcing). For testing.
++
++        Returns:
++            [B, num_steps, 2] int32, the edges added, (row, column) as sampled.
++        """
++        missing = self.N * (self.N - 1) // 2 - int(self.deg.sum(-1).max().item()) // 2
++        if edges is None and num_steps > missing:
++            raise ValueError(f"num_steps = {num_steps} exceeds the {missing} missing edges")
++        return self._launch(num_steps, u=u, edges=edges)
++
++    def step(self, u=None, edges=None) -> torch.Tensor:
++        """One step; u or edges [B, 2]. Returns [B, 2]."""
++        return self.run(1, u=u, edges=edges)[:, 0]
++
++    def adjacency_matrix(self) -> torch.Tensor:
++        """[B, n, n] float32 adjacency matrices (the toolbox's dtype)."""
++        return self.A.to(torch.float32)
++
++    def state(self) -> dict[str, torch.Tensor]:
++        """The internal state, for tests: A, C = A^T A, degrees and row sums of P."""
++        return {"A": self.A, "C": self.C, "deg": self.deg, "r": self.R}
+diff -ruN -x __pycache__ -x '*.pyc' gnm/src/gnm/fast/runner.py work/src/gnm/fast/runner.py
+--- a/src/gnm/fast/runner.py	1970-01-01 00:00:00.000000000 +0000
++++ b/src/gnm/fast/runner.py	2026-11-25 10:23:29.428618917 +0000
+@@ -0,0 +1,335 @@
++r"""Run many [`RunConfig`][gnm.fitting.RunConfig]s on the flash kernel at once.
++
++The toolbox runs one configuration at a time, with `num_simulations` networks per
++configuration. The flash kernel is fastest with many simulations per launch, whatever
++their parameters, so [`run_flash`][gnm.fast.run_flash] packs the simulations of all
++configurations that share a distance matrix, `prob_offset` and number of steps into the
++same launches, then splits the results back into one
++[`Experiment`][gnm.fitting.Experiment] per configuration, in the input order.
++"""
++
++from __future__ import annotations
++
++import gc
++import time
++from typing import Dict, List, Optional, Tuple, Union
++
++import torch
++from tqdm import tqdm
++
++from gnm.generative_rules import MatchingIndex
++from gnm.model import GenerativeNetworkModel
++from gnm.utils import binary_checks, weighted_checks
++
++from .kernel import FlashGNM, flash_available
++
++# Simulation state is 3 bytes per node pair; leave room for evaluation and outputs.
++_STATE_BYTES_PER_PAIR = 3
++_OUTPUT_BYTES_PER_PAIR = 4  # the float32 adjacency matrices handed to evaluations
++
++
++def flash_unsupported_reason(run_config) -> Optional[str]:
++    r"""Why `run_config` can't run on the flash backend, or None if it can.
++
++    Supported: binary growth with `MatchingIndex(divisor="mean")`, power-law distance and
++    preference relationships, any `lambdah` without a heterochronous matrix, any
++    `prob_offset` and `binary_updates_per_iteration`, optional seed networks, and a
++    single [n, n] distance matrix (or none).
++    """
++    bp = run_config.binary_parameters
++    rule = bp.generative_rule
++    if type(rule) is not MatchingIndex:
++        return f"generative rule {rule} (only MatchingIndex is implemented)"
++    if rule.divisor != "mean":
++        return f"MatchingIndex divisor '{rule.divisor}' (only 'mean' is implemented)"
++    if bp.distance_relationship_type != "powerlaw":
++        return f"distance relationship '{bp.distance_relationship_type}' (only 'powerlaw')"
++    if bp.preferential_relationship_type != "powerlaw":
++        return f"preferential relationship '{bp.preferential_relationship_type}' (only 'powerlaw')"
++    if run_config.heterochronous_matrix is not None:
++        return "heterochronous_matrix (heterochronicity is not implemented)"
++    # without a heterochronous matrix H = 1: H ** lambdah = 1, but exp(lambdah * H) is a
++    # constant that would change the weight of prob_offset
++    if bp.heterochronicity_relationship_type == "exponential" and float(bp.lambdah) != 0.0:
++        return "exponential heterochronicity with lambdah != 0"
++    if run_config.weighted_parameters is not None or run_config.seed_weight_matrix is not None:
++        return "weighted parameters (only binary growth is implemented)"
++    D = run_config.distance_matrix
++    if D is not None and D.dim() != 2:
++        return "a per-simulation distance matrix (the batch shares one [n, n] matrix)"
++    return None
++
++
++def _num_nodes(run_config) -> int:
++    if run_config.distance_matrix is not None:
++        return run_config.distance_matrix.shape[-1]
++    if run_config.seed_adjacency_matrix is not None:
++        return run_config.seed_adjacency_matrix.shape[-1]
++    raise ValueError("The flash backend needs a distance matrix or a seed adjacency matrix")
++
++
++def _distance(run_config, n: int, device) -> torch.Tensor:
++    if run_config.distance_matrix is None:  # the toolbox's default: uniform distances
++        D = torch.ones(n, n)
++        D.fill_diagonal_(0.0)
++        return D.to(device)
++    return run_config.distance_matrix.to(device, torch.float32)
++
++
++def _evaluate(
++    adjacency: torch.Tensor,
++    binary_evaluations,
++    real_binary_matrices,
++):
++    # imported here: gnm.fitting imports this module (perform_sweep(backend="flash"))
++    from gnm.fitting.experiment_dataclasses import EvaluationResults
++
++    if binary_evaluations is None or real_binary_matrices is None:
++        return EvaluationResults(binary_evaluations={}, weighted_evaluations={})
++    return EvaluationResults(
++        binary_evaluations={
++            str(evaluation): evaluation(adjacency, real_binary_matrices)
++            for evaluation in binary_evaluations
++        },
++        weighted_evaluations={},
++    )
++
++
++def run_flash(
++    run_configs: List,
++    binary_evaluations: Optional[List] = None,
++    real_binary_matrices: Optional[torch.Tensor] = None,
++    save_model: bool = True,
++    save_run_history: bool = True,
++    device: Optional[Union[torch.device, str]] = None,
++    max_batch_size: Optional[int] = None,
++    verbose: bool = False,
++) -> Tuple[List, List[float]]:
++    r"""Run binary [`RunConfig`][gnm.fitting.RunConfig]s on the flash kernel.
++
++    Same inputs and outputs as calling [`perform_run`][gnm.fitting.perform_run] on each
++    configuration, except:
++
++    - `run_history.adjacency_snapshots` is None. Storing every step costs
++      num_steps x num_simulations x n x n floats (40 GB for n = 1000, 100 simulations and
++      1,000 steps); `run_history.added_edges` has the same information, and
++      [`adjacency_snapshots_from_edges`][gnm.fast.adjacency_snapshots_from_edges] rebuilds
++      the snapshots when they fit in memory.
++    - `clamp_count` counts the steps at which a newly computed wiring weight was inf or
++      nan (and so clamped), per simulation, maximised over simulations. It is nonzero
++      exactly when the toolbox's would be, but the toolbox counts every step while a
++      non-finite weight exists anywhere in the batch, so the values differ.
++    - Weighted evaluations are not supported (there is no weighted model).
++
++    Args:
++        run_configs: configurations; each must pass
++            [`flash_unsupported_reason`][gnm.fast.flash_unsupported_reason].
++        binary_evaluations, real_binary_matrices, save_model, save_run_history, device:
++            as in [`perform_run`][gnm.fitting.perform_run].
++        max_batch_size: simulations per kernel launch. The default fills a third of free
++            GPU memory, up to 1,024 (throughput is flat beyond ~1,000 on an H100).
++        verbose: show a progress bar over launches.
++
++    Returns:
++        The experiments, in the order of `run_configs`, and the time spent on each
++        (each launch's time, split evenly over its simulations).
++    """
++    from gnm.fitting.experiment_dataclasses import Experiment, RunHistory
++
++    if device is None:
++        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
++    device = torch.device(device)
++    if not flash_available(device):
++        raise RuntimeError(
++            f"The flash backend needs Triton and a CUDA device (got {device})."
++        )
++    for k, rc in enumerate(run_configs):
++        reason = flash_unsupported_reason(rc)
++        if reason is not None:
++            raise ValueError(f"run_configs[{k}] is not supported by the flash backend: {reason}")
++    if real_binary_matrices is not None:
++        try:
++            binary_checks(real_binary_matrices)
++        except AssertionError as e:
++            raise AssertionError(f"real_binary_matrices are not valid. {e}")
++        real_binary_matrices = real_binary_matrices.to(device)
++    if binary_evaluations is not None:
++        for evaluation in binary_evaluations:
++            assert evaluation.accepts == "binary", (
++                f"Binary evaluations must accept binary matrices. "
++                f"Evaluation {evaluation} accepts {evaluation.accepts}."
++            )
++
++    # -- group configurations that can share a launch
++    groups: Dict[tuple, List[int]] = {}
++    distances: Dict[tuple, torch.Tensor] = {}
++    for k, rc in enumerate(run_configs):
++        bp = rc.binary_parameters
++        n = _num_nodes(rc)
++        D = _distance(rc, n, device)
++        weighted_checks(D.unsqueeze(0))
++        steps = int(bp.num_iterations) * int(bp.binary_updates_per_iteration)
++        # configurations share a distance matrix if they hold the same tensor (the usual
++        # case in a SweepConfig), else if the values are equal
++        d_key = next(
++            (key for key, other in distances.items()
++             if other.shape == D.shape and (other is D or torch.equal(other, D))),
++            None,
++        )
++        if d_key is None:
++            d_key = (len(distances),)
++            distances[d_key] = D
++        key = (d_key, float(bp.prob_offset), steps)
++        groups.setdefault(key, []).append(k)
++
++    experiments: List = [None] * len(run_configs)
++    run_times: List[float] = [0.0] * len(run_configs)
++    pbar = tqdm(desc="Flash launches", disable=not verbose)
++
++    for (d_key, offset, steps), members in groups.items():
++        D = distances[d_key]
++        n = D.shape[-1]
++        if max_batch_size is None:
++            if device.type == "cuda":
++                free = torch.cuda.mem_get_info(device)[0]
++                per_sim = (_STATE_BYTES_PER_PAIR + _OUTPUT_BYTES_PER_PAIR) * n * n
++                batch = int(max(1, min(1024, free // 3 // per_sim)))
++            else:
++                batch = 64
++        else:
++            batch = max_batch_size
++
++        # flatten to (configuration, replicate) and fill launches in order
++        sims = [
++            (k, r)
++            for k in members
++            for r in range(run_configs[k].num_simulations or 1)
++        ]
++        # per configuration: pieces of (replicate slice, final A, edges, clamp counts)
++        pending: Dict[int, list] = {k: [] for k in members}
++        remaining = {k: run_configs[k].num_simulations or 1 for k in members}
++
++        for lo in range(0, len(sims), batch):
++            chunk = sims[lo:lo + batch]
++            start = time.perf_counter()
++            eta = torch.tensor(
++                [float(run_configs[k].binary_parameters.eta) for k, _ in chunk]
++            )
++            gamma = torch.tensor(
++                [float(run_configs[k].binary_parameters.gamma) for k, _ in chunk]
++            )
++            seeds = [run_configs[k].seed_adjacency_matrix for k, _ in chunk]
++            seed = None
++            if any(s is not None for s in seeds):
++                seed = torch.stack([
++                    torch.zeros(n, n, device=device) if s is None
++                    else (s.to(device) if s.dim() == 2 else s[r].to(device))
++                    for s, (_, r) in zip(seeds, chunk)
++                ])
++            sim = FlashGNM(D, eta.to(device), gamma.to(device),
++                           seed_adjacency_matrix=seed, prob_offset=offset)
++            edges = sim.run(steps)
++            if device.type == "cuda":
++                torch.cuda.synchronize(device)
++            elapsed = time.perf_counter() - start
++
++            # split the launch back into configurations
++            pos = 0
++            while pos < len(chunk):
++                k = chunk[pos][0]
++                end = pos
++                while end < len(chunk) and chunk[end][0] == k:
++                    end += 1
++                pending[k].append((
++                    sim.A[pos:end].to(torch.float32),
++                    edges[pos:end].to(torch.int64),
++                    sim.clamp_count[pos:end],
++                ))
++                run_times[k] += elapsed * (end - pos) / len(chunk)
++                remaining[k] -= end - pos
++                if remaining[k] == 0:
++                    experiments[k] = _finish(
++                        run_configs[k], pending.pop(k), binary_evaluations,
++                        real_binary_matrices, save_model, save_run_history,
++                        Experiment, RunHistory,
++                    )
++                pos = end
++            del sim, edges
++            pbar.update(1)
++
++        gc.collect()
++        if device.type == "cuda":
++            torch.cuda.empty_cache()
++
++    pbar.close()
++    return experiments, run_times
++
++
++def _finish(run_config, pieces, binary_evaluations, real_binary_matrices,
++            save_model, save_run_history, Experiment, RunHistory):
++    A = torch.cat([p[0] for p in pieces])
++    edges = torch.cat([p[1] for p in pieces])  # [S, T, 2]
++    clamp = int(torch.cat([p[2] for p in pieces]).max().item())
++
++    evaluation_results = _evaluate(A, binary_evaluations, real_binary_matrices)
++
++    model = None
++    if save_model:
++        model = GenerativeNetworkModel(
++            binary_parameters=run_config.binary_parameters,
++            num_simulations=A.shape[0],
++            seed_adjacency_matrix=run_config.seed_adjacency_matrix,
++            distance_matrix=run_config.distance_matrix,
++            device=torch.device("cpu"),
++            verbose=False,
++        )
++        model.adjacency_matrix = A.cpu()
++        model._clamp_count = clamp
++
++    run_history = None
++    if save_run_history:
++        run_history = RunHistory(
++            added_edges=edges.transpose(0, 1).contiguous(),  # the toolbox's [T, S, 2]
++            adjacency_snapshots=None,
++            weight_snapshots=None,
++        )
++
++    experiment = Experiment(
++        run_config=run_config,
++        model=model,
++        run_history=run_history,
++        evaluation_results=evaluation_results,
++        clamp_count=clamp,
++    )
++    experiment.to_device("cpu")
++    return experiment
++
++
++def adjacency_snapshots_from_edges(
++    added_edges: torch.Tensor,
++    num_nodes: int,
++    seed_adjacency_matrix: Optional[torch.Tensor] = None,
++) -> torch.Tensor:
++    r"""Rebuild the toolbox's adjacency snapshots from `run_history.added_edges`.
++
++    Args:
++        added_edges: [T, S, 2] edges, as in [`RunHistory`][gnm.fitting.RunHistory].
++        num_nodes: n.
++        seed_adjacency_matrix: optional [n, n] or [S, n, n] starting networks.
++
++    Returns:
++        [T, S, n, n] float32: the adjacency matrices after each step. This needs
++        4 T S n^2 bytes; use it on a subset of steps or simulations at large n.
++    """
++    T, S, _ = added_edges.shape
++    A = torch.zeros(S, num_nodes, num_nodes, device=added_edges.device)
++    if seed_adjacency_matrix is not None:
++        A = A + seed_adjacency_matrix.to(A)
++    out = torch.empty(T, S, num_nodes, num_nodes, device=added_edges.device)
++    s = torch.arange(S, device=added_edges.device)
++    for t in range(T):
++        i, j = added_edges[t, :, 0], added_edges[t, :, 1]
++        A[s, i, j] = 1.0
++        A[s, j, i] = 1.0
++        out[t] = A
++    return out
+diff -ruN -x __pycache__ -x '*.pyc' gnm/src/gnm/fitting/sweep.py work/src/gnm/fitting/sweep.py
+--- a/src/gnm/fitting/sweep.py	2026-11-25 08:59:10.253394670 +0000
++++ b/src/gnm/fitting/sweep.py	2026-11-25 10:00:21.717732013 +0000
+@@ -48,6 +48,50 @@
+ 
+ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+ 
++Backend = Literal["torch", "flash", "auto"]
++
++
++def _flash_indices(
++    run_configs: List[RunConfig],
++    backend: str,
++    device: Optional[Union[torch.device, str]],
++) -> List[int]:
++    r"""Indices of the run configurations to simulate with the flash backend.
++
++    - "torch": none (the default; the reference implementation).
++    - "flash": all of them; raises if a configuration or the device is unsupported.
++    - "auto": those the flash backend supports, if it can run on `device`; the others use
++      the torch implementation.
++    """
++    if backend == "torch":
++        return []
++    if backend not in ("flash", "auto"):
++        raise ValueError(f"backend must be 'torch', 'flash' or 'auto', got {backend!r}")
++
++    from gnm.fast import flash_available, flash_unsupported_reason
++
++    if not flash_available(device):
++        if backend == "flash":
++            raise RuntimeError(
++                f"backend='flash' needs Triton and a CUDA device (got {device})."
++            )
++        return []
++    reasons = [flash_unsupported_reason(rc) for rc in run_configs]
++    if backend == "flash":
++        for k, reason in enumerate(reasons):
++            if reason is not None:
++                raise ValueError(
++                    f"Run configuration {k} is not supported by backend='flash': {reason}. "
++                    f"Use backend='auto' to run such configurations with the torch backend."
++                )
++    fallback = [r for r in reasons if r is not None]
++    if fallback:
++        print(
++            f"backend='auto': {len(fallback)} of {len(run_configs)} configuration(s) use the "
++            f"torch backend (e.g. unsupported {fallback[0]})."
++        )
++    return [k for k, r in enumerate(reasons) if r is None]
++
+ 
+ @jaxtyped(typechecker=typechecked)
+ def perform_run(
+@@ -72,6 +116,7 @@
+     save_model: bool = True,
+     save_run_history: bool = True,
+     device: Optional[Union[torch.device, str]] = None,
++    backend: Backend = "torch",
+ ) -> Experiment:
+     r"""Perform a single run of the generative network model.
+ 
+@@ -102,6 +147,12 @@
+             Set this argument to False to save on memory. Defaults to True.
+         device:
+             Device to run the model on. If unspecified, uses CUDA if available, else CPU.
++        backend:
++            "torch" (default): [`GenerativeNetworkModel`][gnm.GenerativeNetworkModel].
++            "flash": the fused GPU kernel in [`gnm.fast`][gnm.fast] (binary matching-index
++            models with power-law terms; raises otherwise). "auto": flash if supported,
++            else torch. See [`run_flash`][gnm.fast.run_flash] for how flash results differ
++            (no adjacency snapshots).
+ 
+     Returns:
+         An Experiment object containing the run configuration, evaluation results,
+@@ -146,6 +197,19 @@
+         - [`GenerativeNetworkModel`][gnm.GenerativeNetworkModel]: The network model being executed
+     """
+ 
++    if _flash_indices([run_config], backend, device):
++        from gnm.fast import run_flash
++
++        experiments, _ = run_flash(
++            [run_config],
++            binary_evaluations=binary_evaluations,
++            real_binary_matrices=real_binary_matrices,
++            save_model=save_model,
++            save_run_history=save_run_history,
++            device=device,
++        )
++        return experiments[0]
++
+     model = GenerativeNetworkModel(
+         binary_parameters=run_config.binary_parameters,
+         num_simulations=run_config.num_simulations,
+@@ -220,6 +284,7 @@
+     method: Literal["bayesian", "grid"] = "grid",
+     num_bayesian_runs: Optional[int] = 30,
+     metric_to_optimise: Optional[Union[str, EvaluationCriterion]] = None,
++    backend: Backend = "torch",
+ ) -> List[Experiment]:
+     r"""Perform a parameter sweep over multiple model configurations.
+ 
+@@ -279,6 +344,15 @@
+             This is only used if method is 'bayesian'.
+             If unspecified, the first binary evaluation will be used if available,
+             otherwise the first weighted evaluation will be used.
++        backend:
++            "torch" (default): run each configuration with
++            [`GenerativeNetworkModel`][gnm.GenerativeNetworkModel].
++            "flash": run all configurations with the fused GPU kernel in
++            [`gnm.fast`][gnm.fast], many per launch (binary matching-index models with
++            power-law terms; raises otherwise). "auto": flash for the configurations it
++            supports, torch for the rest. Grid sweeps only. See
++            [`run_flash`][gnm.fast.run_flash] for how flash results differ (no adjacency
++            snapshots).
+ 
+     Returns:
+         A list of Experiment objects, one for each parameter combination in the sweep.
+@@ -333,14 +407,42 @@
+     print(f"Using device: {device} for GNM simulations")
+ 
+     def perform_grid_sweep():
+-        run_results = []
+-        run_times = []
+-        for run_config in tqdm(
+-            sweep_config,
++        run_configs = list(sweep_config)
++        run_results = [None] * len(run_configs)
++        run_times = [0.0] * len(run_configs)
++
++        flash = _flash_indices(run_configs, backend, device)
++        if flash:
++            from gnm.fast import run_flash
++
++            flash_results, flash_times = run_flash(
++                [run_configs[k] for k in flash],
++                binary_evaluations=binary_evaluations,
++                real_binary_matrices=real_binary_matrices,
++                save_model=save_model,
++                save_run_history=save_run_history,
++                device=device,
++                verbose=verbose,
++            )
++            for k, experiment, run_time in zip(flash, flash_results, flash_times):
++                run_results[k] = experiment
++                run_times[k] = run_time
++                if wandb_logging:
++                    exp = ExperimentEvaluation(save=False)
++                    experiment_data_config = exp._save_experiment(experiment)
++                    wandb.init(project=project_name, config=experiment_data_config)
++                    wandb.log(experiment_data_config)
++                    wandb.finish()
++
++        flash_set = set(flash)
++        torch_indices = [k for k in range(len(run_configs)) if k not in flash_set]
++        for k in tqdm(
++            torch_indices,
+             desc="Configuration Iterations",
+-            total=config_count,
++            total=len(torch_indices),
+             disable=not verbose,
+         ):
++            run_config = run_configs[k]
+             start_time = time.perf_counter()
+             experiment = perform_run(
+                 run_config=run_config,
+@@ -355,9 +457,9 @@
+ 
+             end_time = time.perf_counter()
+             run_time = end_time - start_time
+-            run_times.append(run_time)
++            run_times[k] = run_time
+ 
+-            run_results.append(experiment)
++            run_results[k] = experiment
+ 
+             if wandb_logging:
+                 exp = ExperimentEvaluation(save=False)
+@@ -452,6 +554,10 @@
+         project_name = input("Enter wandb project name: ")
+ 
+     if method == "bayesian":
++        if backend == "flash":
++            raise NotImplementedError(
++                "backend='flash' supports grid sweeps only; use method='grid'."
++            )
+         if metric_to_optimise is None:
+             if len(binary_evaluations) != 0:
+                 metric_to_optimise = binary_evaluations[0]
+@@ -486,7 +592,6 @@
+         run_times = perform_bayesian_sweep(binary_sweep_configuration)
+ 
+     else:
+-        config_count = len(list(sweep_config))
+         run_results, run_times = perform_grid_sweep()
+ 
+     if verbose:
+diff -ruN -x __pycache__ -x '*.pyc' gnm/tests/test_flash_kernel.py work/tests/test_flash_kernel.py
+--- a/tests/test_flash_kernel.py	1970-01-01 00:00:00.000000000 +0000
++++ b/tests/test_flash_kernel.py	2026-11-25 10:30:13.534237007 +0000
+@@ -0,0 +1,345 @@
++"""Correctness of the flash kernel (gnm.fast.FlashGNM) against the toolbox's own maths.
++
++The reference for every test is the toolbox: wiring weights come from `MatchingIndex` and
++the same operations as `GenerativeNetworkModel.binary_update`, and the slow test compares
++whole networks with `GenerativeNetworkModel` itself.
++
++    pytest tests/test_flash_kernel.py -v                 # on a CUDA GPU (~1 min)
++    GNM_RUN_SLOW=1 pytest tests/test_flash_kernel.py -v  # + distribution vs the toolbox
++    TRITON_INTERPRET=1 pytest tests/test_flash_kernel.py -v   # CPU interpreter (slow)
++
++What each test establishes:
++
++- test_initial_row_sums: the kernel's starting state (R = row sums of P) equals the
++  toolbox's weights, for empty and seeded networks, including eta = 0, zero distances
++  and the prob_offset.
++- test_teacher_forced_state: after any sequence of added edges, A, C = A^T A, the degrees
++  and R equal a from-scratch recomputation (the O(n) incremental updates are exact).
++- test_sampling_follows_weights: with given uniforms, each sampled edge is the one that
++  inverse-CDF sampling picks from the toolbox's weights for the current network.
++- test_sampling_distribution: the sampled edges follow P / sum(P) (chi-square), with the
++  kernel's own random numbers.
++- test_edges_valid_until_complete: edges are new, off-diagonal, and the network can be
++  grown to completion; asking for more edges than are missing raises.
++- test_clamping: extreme parameters give inf weights; they are clamped as in the toolbox
++  and counted.
++- test_long_run_drift: the maintained row sums stay equal to fresh sums over long runs.
++- test_distribution_vs_toolbox (slow): networks grown by the kernel and by
++  GenerativeNetworkModel have the same distribution of degree, clustering and edge length.
++"""
++
++import os
++
++import numpy as np
++import pytest
++import torch
++
++from gnm import BinaryGenerativeParameters, GenerativeNetworkModel
++from gnm.defaults import get_binary_network, get_distance_matrix
++from gnm.fast import FlashGNM, flash_available
++from gnm.generative_rules import MatchingIndex
++
++DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
++INTERPRETED = DEVICE.type == "cpu"  # Triton's CPU interpreter: keep cases small
++
++pytestmark = pytest.mark.skipif(
++    not flash_available(DEVICE),
++    reason="needs Triton and a CUDA GPU (or TRITON_INTERPRET=1 set before importing triton)",
++)
++slow = pytest.mark.skipif(
++    not os.environ.get("GNM_RUN_SLOW"),
++    reason="slow statistical test: set GNM_RUN_SLOW=1",
++)
++
++PARAMS = [(-2.0, 0.3), (-1.0, -0.5), (0.0, 0.0), (1.5, 1.0)]
++
++
++# ---------------------------------------------------------------- reference (toolbox)
++def toolbox_weights(A, D, eta, gamma, offset=1e-6):
++    """Unnormalised wiring weights, [B, n, n], float64 from the toolbox's float32 maths.
++
++    Mirrors GenerativeNetworkModel.binary_update (powerlaw terms, heterochronicity 1):
++    affinity = MatchingIndex(A); affinity[affinity == 0] += offset; P = D^eta * K^gamma
++    + offset; zero on edges and the diagonal; nan -> 0, inf -> 1e30.
++    """
++    A = A.to(torch.float32)
++    K = MatchingIndex(divisor="mean")(A)
++    K[K == 0] += offset
++    eta = torch.as_tensor(eta, dtype=torch.float32, device=A.device).view(-1, 1, 1)
++    gamma = torch.as_tensor(gamma, dtype=torch.float32, device=A.device).view(-1, 1, 1)
++    P = torch.pow(D, eta) * K.pow(gamma) + offset
++    P = P * (1 - A)
++    idx = torch.arange(A.shape[-1], device=A.device)
++    P[..., idx, idx] = 0.0
++    P = torch.nan_to_num(P, nan=0.0, posinf=1e30, neginf=0.0)
++    return P.to(torch.float64)
++
++
++def distances(n, seed=0):
++    """Euclidean distances between random points in the unit cube, zero diagonal."""
++    g = torch.Generator().manual_seed(seed)
++    x = torch.rand(n, 3, generator=g)
++    return torch.cdist(x, x).to(DEVICE)
++
++
++def random_graph(B, n, p, seed=0):
++    g = torch.Generator().manual_seed(seed)
++    A = (torch.rand(B, n, n, generator=g) < p).triu(1)
++    return (A | A.transpose(-1, -2)).to(torch.float32).to(DEVICE)
++
++
++def random_new_edges(A, T, seed=0):
++    """T edges per simulation not in A, as [B, T, 2], in random order."""
++    g = torch.Generator().manual_seed(seed)
++    out = []
++    for a in A.cpu().bool():
++        n = a.shape[0]
++        i, j = torch.triu_indices(n, n, 1)
++        free = ~a[i, j]
++        pick = torch.randperm(int(free.sum()), generator=g)[:T]
++        e = torch.stack([i[free][pick], j[free][pick]], -1)
++        flip = torch.rand(T, generator=g) < 0.5  # both orientations
++        e[flip] = e[flip].flip(-1)
++        out.append(e)
++    return torch.stack(out).to(DEVICE)
++
++
++def params(B):
++    eta = torch.tensor([PARAMS[b % len(PARAMS)][0] for b in range(B)], device=DEVICE)
++    gamma = torch.tensor([PARAMS[b % len(PARAMS)][1] for b in range(B)], device=DEVICE)
++    return eta, gamma
++
++
++def assert_state(sim, A, D, eta, gamma, offset=1e-6, rtol=1e-5):
++    """Kernel state equals a from-scratch recomputation from the adjacency A."""
++    st = sim.state()
++    assert torch.equal(st["A"], A.bool()), "adjacency"
++    C = A @ A
++    assert torch.equal(st["C"].to(torch.float32), C), "C = A^T A"
++    assert torch.equal(st["deg"].to(torch.float32), A.sum(-1)), "degrees"
++    R = toolbox_weights(A, D, eta, gamma, offset).sum(-1)
++    torch.testing.assert_close(st["r"], R, rtol=rtol, atol=1e-30)
++
++
++# ---------------------------------------------------------------- tests
++@pytest.mark.parametrize("n,B", [(12, 4), (33, 8)] + ([] if INTERPRETED else [(200, 16)]))
++@pytest.mark.parametrize("seeded", [False, True])
++def test_initial_row_sums(n, B, seeded):
++    D = distances(n)
++    eta, gamma = params(B)
++    seed = random_graph(B, n, 0.2) if seeded else None
++    sim = FlashGNM(D, eta, gamma, seed_adjacency_matrix=seed)
++    A = seed if seeded else torch.zeros(B, n, n, device=DEVICE)
++    assert_state(sim, A, D, eta, gamma)
++
++
++def test_initial_row_sums_zero_distances_and_offset():
++    """Zero off-diagonal distances (0 ** eta: inf, 0 or 1) and a non-default offset."""
++    n, B = 12, 4
++    D = distances(n)
++    D[0, 1] = D[1, 0] = 0.0
++    eta, gamma = torch.tensor([-1.0, 0.0, 1.0, 0.0], device=DEVICE), torch.zeros(B, device=DEVICE)
++    sim = FlashGNM(D, eta, gamma, prob_offset=1e-3)
++    assert_state(sim, torch.zeros(B, n, n, device=DEVICE), D, eta, gamma, offset=1e-3)
++
++
++@pytest.mark.parametrize("mode", ["step", "run"])
++@pytest.mark.parametrize("seeded", [False, True])
++def test_teacher_forced_state(mode, seeded):
++    n, B, T = (20, 4, 30) if INTERPRETED else (64, 16, 400)
++    D = distances(n)
++    eta, gamma = params(B)
++    A = random_graph(B, n, 0.1) if seeded else torch.zeros(B, n, n, device=DEVICE)
++    sim = FlashGNM(D, eta, gamma, seed_adjacency_matrix=A if seeded else None)
++    edges = random_new_edges(A, T)
++    b = torch.arange(B, device=DEVICE)
++    chunks = [edges[:, t:t + 1] for t in range(T)] if mode == "step" else [edges[:, : T // 2], edges[:, T // 2:]]
++    for k, chunk in enumerate(chunks):
++        out = sim.run(chunk.shape[1], edges=chunk)
++        assert torch.equal(out.long(), chunk.long())
++        for t in range(chunk.shape[1]):
++            A[b, chunk[:, t, 0], chunk[:, t, 1]] = 1
++            A[b, chunk[:, t, 1], chunk[:, t, 0]] = 1
++        if mode == "run" or k % 10 == 9 or k == len(chunks) - 1:
++            assert_state(sim, A, D, eta, gamma)
++
++
++def _inverse_cdf(w, u):
++    """Index chosen by inverse-CDF sampling from weights w with uniform u, and the
++    distance from u to the nearest boundary (relative), to skip float near-ties."""
++    c = torch.cumsum(w, -1)
++    x = u * c[-1]
++    k = int(torch.searchsorted(c, x, right=True))
++    lo = c[k - 1] if k > 0 else torch.zeros((), dtype=c.dtype, device=c.device)
++    margin = float(torch.minimum(x - lo, c[k] - x) / c[-1])
++    return k, margin
++
++
++def test_sampling_follows_weights():
++    """With given uniforms (u_row, u_col), the kernel picks row i by R and column j by
++    row i of P; compare with inverse-CDF sampling on the toolbox's weights, step by step."""
++    n, B, T = (16, 4, 40) if INTERPRETED else (90, 32, 600)
++    D = distances(n)
++    eta, gamma = params(B)
++    sim = FlashGNM(D, eta, gamma)
++    g = torch.Generator().manual_seed(1)
++    A = torch.zeros(B, n, n, device=DEVICE)
++    checked = 0
++    for t in range(T):
++        u = torch.rand(B, 2, generator=g)
++        W = toolbox_weights(A, D, eta, gamma)
++        out = sim.step(u=u)
++        for s in range(B):
++            i, m_i = _inverse_cdf(W[s].sum(-1), float(u[s, 0]))
++            if m_i < 1e-6:  # float near-tie between two rows: either answer is right
++                continue
++            assert int(out[s, 0]) == i, f"step {t}, sim {s}: row {int(out[s, 0])} != {i}"
++            j, m_j = _inverse_cdf(W[s, i], float(u[s, 1]))
++            if m_j >= 1e-6:
++                assert int(out[s, 1]) == j, f"step {t}, sim {s}: column {int(out[s, 1])} != {j}"
++                checked += 1
++        b = torch.arange(B, device=DEVICE)
++        A[b, out[:, 0].long(), out[:, 1].long()] = 1
++        A[b, out[:, 1].long(), out[:, 0].long()] = 1
++    assert checked > 0.95 * B * T
++    assert_state(sim, A, D, eta, gamma)
++
++
++# gamma < 0 favours pairs without shared neighbours, with weight prob_offset ** gamma:
++# keep |gamma| small so the distribution is spread over many pairs (gamma = -1 puts it all
++# on one pair, and the test would say nothing)
++@pytest.mark.parametrize("eta,gamma", [(-2.0, 0.3), (1.0, -0.2)])
++def test_sampling_distribution(eta, gamma):
++    """B copies of one seeded network take one step each with the kernel's own RNG; the
++    counts of each unordered edge must follow (P + P^T) / sum(P) (chi-square)."""
++    from scipy.stats import chisquare
++
++    n, B = 10, (1024 if INTERPRETED else 65536)
++    D = distances(n)
++    seed = random_graph(1, n, 0.3, seed=3)[0]
++    torch.manual_seed(0)
++    sim = FlashGNM(D, torch.full((B,), eta, device=DEVICE), torch.full((B,), gamma, device=DEVICE),
++                   seed_adjacency_matrix=seed)
++    e = sim.step().long().cpu()
++    lo, hi = torch.minimum(e[:, 0], e[:, 1]), torch.maximum(e[:, 0], e[:, 1])
++    counts = torch.bincount(lo * n + hi, minlength=n * n).view(n, n).to(torch.float64)
++
++    W = toolbox_weights(seed[None], D, eta, gamma)[0].cpu()
++    p = torch.triu(W + W.T, 1)
++    p = p / p.sum()
++    keep = p > 0
++    assert counts[~keep].sum() == 0, "sampled an existing edge or the diagonal"
++    expected = p[keep] * B
++    order = torch.argsort(expected)
++    exp_sorted, obs_sorted = expected[order], counts[keep][order]
++    # merge the rarest cells until each expected count is >= 5
++    cut = int(torch.searchsorted(torch.cumsum(exp_sorted, 0), torch.tensor(5.0, dtype=torch.float64)))
++    exp_m = torch.cat([exp_sorted[: cut + 1].sum().view(1), exp_sorted[cut + 1:]])
++    obs_m = torch.cat([obs_sorted[: cut + 1].sum().view(1), obs_sorted[cut + 1:]])
++    assert len(exp_m) >= 10, "test design: the distribution is too concentrated to test"
++    _, pval = chisquare(obs_m.numpy(), exp_m.numpy())
++    assert pval > 1e-4, f"chi-square p = {pval:.2e}"
++
++
++@pytest.mark.parametrize("rng", ["uniforms", "internal"])
++def test_edges_valid_until_complete(rng):
++    n, B = 12, 4
++    D = distances(n)
++    eta, gamma = params(B)
++    sim = FlashGNM(D, eta, gamma)
++    T = n * (n - 1) // 2
++    u = torch.rand(B, T, 2) if rng == "uniforms" else None
++    e = sim.run(T, u=u).long().cpu()
++    assert (e[..., 0] != e[..., 1]).all(), "self-loop"
++    assert ((e >= 0) & (e < n)).all(), "index out of range"
++    key = torch.minimum(e[..., 0], e[..., 1]) * n + torch.maximum(e[..., 0], e[..., 1])
++    for s in range(B):
++        assert key[s].unique().numel() == T, "an edge was added twice"
++    full = torch.ones(n, n, dtype=torch.bool, device=DEVICE).fill_diagonal_(False)
++    assert (sim.state()["A"] == full).all()
++    with pytest.raises(ValueError):
++        sim.run(1)
++
++
++def test_clamping():
++    """gamma = -20 with K = 1e-6 overflows float32: weights are clamped to 1e30 and the
++    clamps counted, as in the toolbox; the toolbox model clamps too."""
++    n, B, T = 12, 2, 10
++    D = distances(n)
++    eta = torch.tensor([0.0, -1.0], device=DEVICE)
++    gamma = torch.tensor([-20.0, 0.3], device=DEVICE)
++    sim = FlashGNM(D, eta, gamma)
++    assert torch.isfinite(sim.state()["r"]).all()
++    assert sim.clamp_count.tolist()[0] > 0 and sim.clamp_count.tolist()[1] == 0
++    e = sim.run(T).long()
++    assert ((e >= 0) & (e < n)).all()
++    A = sim.state()["A"].to(torch.float32)
++    assert_state(sim, A, D, eta, gamma)
++
++    model = GenerativeNetworkModel(
++        binary_parameters=BinaryGenerativeParameters(
++            eta=0.0, gamma=-20.0, lambdah=0.0, distance_relationship_type="powerlaw",
++            preferential_relationship_type="powerlaw", heterochronicity_relationship_type="powerlaw",
++            generative_rule=MatchingIndex(), num_iterations=1),
++        num_simulations=1, distance_matrix=D.cpu(), device=torch.device("cpu"))
++    with pytest.warns(UserWarning):
++        model.run_model()
++    assert model._clamp_count > 0
++
++
++def test_long_run_drift():
++    """R is updated by differences for thousands of steps; it must stay equal to fresh
++    row sums (float64 accumulation of float32 rows)."""
++    D = get_distance_matrix().to(DEVICE)  # n = 90
++    n = D.shape[0]
++    B, T = (4, 100) if INTERPRETED else (64, 3000)
++    eta, gamma = params(B)
++    sim = FlashGNM(D, eta, gamma)
++    sim.run(T)
++    A = sim.state()["A"].to(torch.float32)
++    assert (A.sum((-1, -2)) == 2 * T).all()
++    assert_state(sim, A, D, eta, gamma, rtol=1e-5)
++
++
++@slow
++@pytest.mark.skipif(INTERPRETED, reason="too slow in the interpreter")
++@pytest.mark.parametrize("eta,gamma", [(-2.0, 0.3), (-1.0, 0.6)])
++def test_distribution_vs_toolbox(eta, gamma):
++    """Grow S networks with GenerativeNetworkModel and S with the kernel (same
++    parameters, the toolbox's distance matrix and the edge count of its binary network);
++    the per-network statistics must have the same distributions (two-sample KS)."""
++    from scipy.stats import ks_2samp
++
++    S = 300
++    D = get_distance_matrix().to(DEVICE)
++    T = int(get_binary_network()[0].sum().item()) // 2  # 400 edges on 90 nodes
++    bp = BinaryGenerativeParameters(
++        eta=eta, gamma=gamma, lambdah=0.0, distance_relationship_type="powerlaw",
++        preferential_relationship_type="powerlaw", heterochronicity_relationship_type="powerlaw",
++        generative_rule=MatchingIndex(), num_iterations=T)
++    torch.manual_seed(0)
++    model = GenerativeNetworkModel(binary_parameters=bp, num_simulations=S,
++                                   distance_matrix=D, device=DEVICE)
++    model.run_model()
++    A_ref = model.adjacency_matrix
++    sim = FlashGNM(D, torch.full((S,), eta, device=DEVICE), torch.full((S,), gamma, device=DEVICE))
++    sim.run(T)
++    A_new = sim.adjacency_matrix()
++
++    def summaries(A):
++        deg = A.sum(-1)
++        tri = torch.diagonal(A @ A @ A, dim1=-2, dim2=-1)
++        clust = torch.where(deg > 1, tri / (deg * (deg - 1)).clamp(min=1), torch.zeros_like(deg))
++        length = (A * D).sum((-1, -2)) / A.sum((-1, -2))
++        return {
++            "max degree": deg.max(-1).values,
++            "degree std": deg.std(-1),
++            "mean clustering": clust.mean(-1),
++            "mean edge length": length,
++            "isolated nodes": (deg == 0).sum(-1).to(torch.float32),
++        }
++
++    ref, new = summaries(A_ref), summaries(A_new)
++    for name in ref:
++        p = ks_2samp(ref[name].cpu().numpy(), new[name].cpu().numpy()).pvalue
++        assert p > 1e-3, f"{name}: KS p = {p:.2e} (toolbox vs flash)"
+diff -ruN -x __pycache__ -x '*.pyc' gnm/tests/test_flash_sweep.py work/tests/test_flash_sweep.py
+--- a/tests/test_flash_sweep.py	1970-01-01 00:00:00.000000000 +0000
++++ b/tests/test_flash_sweep.py	2026-11-25 10:33:21.131447010 +0000
+@@ -0,0 +1,180 @@
++"""perform_sweep / perform_run with backend="flash" or "auto" (gnm.fast.run_flash).
++
++These check the integration: the same experiments, in the same order and with the same
++result structure, as the torch backend; fallback and errors for unsupported
++configurations; seeds; and reproducibility. Correctness of the simulation itself is in
++test_flash_kernel.py.
++
++    pytest tests/test_flash_sweep.py -v      # CUDA GPU, or TRITON_INTERPRET=1 on CPU
++"""
++
++import pytest
++import torch
++
++from gnm import BinaryGenerativeParameters
++from gnm.defaults import get_binary_network, get_distance_matrix
++from gnm.evaluation import ClusteringKS, DegreeKS, EdgeLengthKS
++from gnm.fast import adjacency_snapshots_from_edges, flash_available, flash_unsupported_reason
++from gnm.fitting import BinarySweepParameters, RunConfig, SweepConfig, perform_run, perform_sweep
++from gnm.generative_rules import MatchingIndex, Neighbours
++
++DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
++
++pytestmark = pytest.mark.skipif(
++    not flash_available(DEVICE),
++    reason="needs Triton and a CUDA GPU (or TRITON_INTERPRET=1 set before importing triton)",
++)
++
++STEPS = 30  # small: these tests also run in Triton's CPU interpreter
++
++
++def sweep_config(num_simulations=3, preferential=("powerlaw",), rules=None, **kw):
++    params = BinarySweepParameters(
++        eta=torch.tensor([-3.0, -1.0]),
++        gamma=torch.tensor([0.2, 0.5]),
++        lambdah=torch.tensor([0.0]),
++        distance_relationship_type=["powerlaw"],
++        preferential_relationship_type=list(preferential),
++        heterochronicity_relationship_type=["powerlaw"],
++        generative_rule=rules or [MatchingIndex()],
++        num_iterations=[STEPS],
++        **kw,
++    )
++    return SweepConfig(
++        binary_sweep_parameters=params,
++        num_simulations=num_simulations,
++        distance_matrix=[get_distance_matrix()],
++    )
++
++
++def evaluations():
++    return [DegreeKS(), ClusteringKS(), EdgeLengthKS(get_distance_matrix())]
++
++
++def sweep(config, backend, **kw):
++    return perform_sweep(
++        config,
++        binary_evaluations=evaluations(),
++        real_binary_matrices=get_binary_network(),
++        device=DEVICE,
++        backend=backend,
++        **kw,
++    )
++
++
++def test_same_structure_as_torch_backend():
++    config = sweep_config()
++    ref = sweep(config, "torch")
++    new = sweep(config, "flash")
++    assert len(new) == len(ref) == 4
++    for r, f in zip(ref, new):
++        rb, fb = r.run_config.binary_parameters, f.run_config.binary_parameters
++        assert (float(rb.eta), float(rb.gamma)) == (float(fb.eta), float(fb.gamma))
++        assert r.evaluation_results.binary_evaluations.keys() == f.evaluation_results.binary_evaluations.keys()
++        for k, v in r.evaluation_results.binary_evaluations.items():
++            assert f.evaluation_results.binary_evaluations[k].shape == v.shape
++            assert f.evaluation_results.binary_evaluations[k].device.type == "cpu"
++        assert f.model.adjacency_matrix.shape == r.model.adjacency_matrix.shape
++        assert f.model.adjacency_matrix.dtype == r.model.adjacency_matrix.dtype
++        assert (f.model.adjacency_matrix.sum((-1, -2)) == 2 * STEPS).all()
++        assert f.run_history.added_edges.shape == r.run_history.added_edges.shape
++        assert f.run_history.adjacency_snapshots is None  # see run_flash
++        assert f.clamp_count == 0
++
++
++def test_snapshots_from_edges():
++    (e,) = sweep(sweep_config(), "flash")[:1]
++    snaps = adjacency_snapshots_from_edges(e.run_history.added_edges, 90)
++    assert snaps.shape == (STEPS, 3, 90, 90)
++    assert torch.equal(snaps[-1], e.model.adjacency_matrix)
++    assert torch.equal(snaps.sum((-1, -2))[:, 0], 2 * torch.arange(1, STEPS + 1, dtype=torch.float32))
++
++
++def test_reproducible_with_manual_seed():
++    torch.manual_seed(123)
++    a = sweep(sweep_config(), "flash")
++    torch.manual_seed(123)
++    b = sweep(sweep_config(), "flash")
++    for x, y in zip(a, b):
++        assert torch.equal(x.run_history.added_edges, y.run_history.added_edges)
++
++
++def test_small_batches_split_configurations():
++    """Configurations split across launches are reassembled in order."""
++    from gnm.fast import run_flash
++
++    configs = list(sweep_config(num_simulations=5))
++    exps, times = run_flash(configs, device=DEVICE, max_batch_size=3)
++    assert len(exps) == 4 and len(times) == 4
++    for rc, e in zip(configs, exps):
++        assert e.run_config is rc
++        assert e.model.adjacency_matrix.shape == (5, 90, 90)
++        assert (e.model.adjacency_matrix.sum((-1, -2)) == 2 * STEPS).all()
++
++
++def test_seed_networks_and_updates_per_iteration():
++    seed = get_binary_network()[0].clone()
++    keep = torch.rand(seed.shape, generator=torch.Generator().manual_seed(0)) < 0.25
++    seed = seed * (keep | keep.T)  # a sparse subset of the target, symmetric
++    config = sweep_config(binary_updates_per_iteration=[2])
++    config.seed_adjacency_matrix = [seed]
++    for e in sweep(config, "flash"):
++        A = e.model.adjacency_matrix
++        assert (A >= seed).all(), "seed edges kept"
++        assert (A.sum((-1, -2)) == seed.sum() + 2 * 2 * STEPS).all()
++        assert e.run_history.added_edges.shape[0] == 2 * STEPS
++
++
++def test_auto_falls_back_and_flash_raises():
++    config = sweep_config(preferential=("powerlaw", "exponential"))
++    reasons = [flash_unsupported_reason(rc) for rc in config]
++    assert sum(r is None for r in reasons) == 4 and sum(r is not None for r in reasons) == 4
++
++    with pytest.raises(ValueError, match="not supported by backend='flash'"):
++        sweep(config, "flash")
++
++    exps = sweep(config, "auto")
++    assert len(exps) == 8
++    for rc, e in zip(config, exps):
++        flash = flash_unsupported_reason(rc) is None
++        assert (e.run_history.adjacency_snapshots is None) == flash  # torch keeps snapshots
++
++
++@pytest.mark.parametrize(
++    "change,expected",
++    [
++        (dict(generative_rule=Neighbours()), "generative rule"),
++        (dict(generative_rule=MatchingIndex(divisor="union")), "divisor"),
++        (dict(distance_relationship_type="exponential"), "distance relationship"),
++        (dict(heterochronicity_relationship_type="exponential", lambdah=1.0), "heterochronicity"),
++    ],
++)
++def test_unsupported_reasons(change, expected):
++    base = dict(
++        eta=-2.0, gamma=0.3, lambdah=0.0, distance_relationship_type="powerlaw",
++        preferential_relationship_type="powerlaw", heterochronicity_relationship_type="powerlaw",
++        generative_rule=MatchingIndex(), num_iterations=10,
++    )
++    base.update(change)
++    rc = RunConfig(binary_parameters=BinaryGenerativeParameters(**base), num_simulations=1,
++                   distance_matrix=get_distance_matrix())
++    assert expected in flash_unsupported_reason(rc)
++
++
++def test_supported_lambdah_without_heterochronous_matrix():
++    rc = RunConfig(
++        binary_parameters=BinaryGenerativeParameters(
++            eta=-2.0, gamma=0.3, lambdah=2.0, distance_relationship_type="powerlaw",
++            preferential_relationship_type="powerlaw", heterochronicity_relationship_type="powerlaw",
++            generative_rule=MatchingIndex(), num_iterations=10),
++        num_simulations=2, distance_matrix=get_distance_matrix())
++    assert flash_unsupported_reason(rc) is None
++    e = perform_run(rc, binary_evaluations=evaluations(), real_binary_matrices=get_binary_network(),
++                    device=DEVICE, backend="flash")
++    assert e.model.adjacency_matrix.sum() == 2 * 2 * 10
++    assert set(e.evaluation_results.binary_evaluations) == {str(c) for c in evaluations()}
++
++
++def test_bayesian_with_flash_raises():
++    with pytest.raises(NotImplementedError):
++        sweep(sweep_config(), "flash", method="bayesian")
