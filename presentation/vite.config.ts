@@ -22,6 +22,7 @@ export default defineConfig({
         './src/talkC_payoff.ts',
         './src/talkD_papers.ts',
         './src/talkE_enables.ts',
+        './src/maintainer.ts',
       ],
     }),
     ffmpeg(),
