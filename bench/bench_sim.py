@@ -187,9 +187,9 @@ class ToolboxImpl(Impl):
 
 def get_impl(spec: str) -> Impl:
     if spec == "triton_proto":
-        from kernel import TritonGNM
+        from kernel import FlashGNM
 
-        return ContractImpl("triton_proto", TritonGNM)
+        return ContractImpl("triton_proto", FlashGNM)
     if spec == "rowsampled":
         return RowSampledImpl()
     if spec == "leandense":

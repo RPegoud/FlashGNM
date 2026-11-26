@@ -58,7 +58,7 @@ def test_run_subject_end_to_end():
     np.testing.assert_array_equal(L["energy"], L["ks"].max(-1))
 
     # re-simulate one batch with the same seed and score it independently from A alone
-    from src.kernel import TritonGNM
+    from src.kernel import FlashGNM
     D, target, _ = ls.load_griffa("033")
     A_t = target(0)
     T = int(A_t.sum()) // 2
@@ -66,7 +66,7 @@ def test_run_subject_end_to_end():
     torch.manual_seed(0 * 1_000_003 + 0 * 1009 + 0)
     D1 = D.clone().cuda()
     D1.fill_diagonal_(1.0)
-    sim = TritonGNM(D1, eta[:7].cuda(), gamma[:7].cuda())
+    sim = FlashGNM(D1, eta[:7].cuda(), gamma[:7].cuda())
     sim.run(T)
     ref = ev.evaluate(sim.A.cpu(), D, ev.Targets.from_adjacency(A_t, D))
     np.testing.assert_allclose(L["ks"].reshape(-1, 4)[:7], ref.ks[:, 0].numpy(), atol=1e-12)

@@ -182,7 +182,7 @@ def default_num_warps(n: int) -> int:
     return max(2, min(16, triton.next_power_of_2(n) // 128))
 
 
-class TritonGNM:
+class FlashGNM:
     """Batch of B binary GNM simulations, one (eta, gamma) each.
 
     dist [n, n] float32, symmetric, diagonal 1 (masked; avoids 0 ** eta)
